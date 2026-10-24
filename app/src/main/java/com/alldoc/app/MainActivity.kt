@@ -58,21 +58,77 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var pendingCreateDocumentAction: ((Uri) -> Unit)? = null
+    private var pendingCameraPhotoUri: Uri? = null
+
     // Save a Copy launcher (Storage Access Framework Create Document)
     private val createDocumentLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
     ) { destinationUri: Uri? ->
         if (destinationUri != null) {
-            viewerViewModel.saveCopyToUriWithResult(destinationUri) { result: SaveResult ->
-                val msg = when (result) {
-                    is SaveResult.Success -> "Saved copy successfully"
-                    is SaveResult.WriteFailedOriginalRestored -> "Save copy failed during write. Target restored."
-                    is SaveResult.WriteFailedRestoreFailed -> "Save copy failed: ${result.message}"
-                    is SaveResult.ValidationFailed -> "Save copy aborted: validation failed."
-                    is SaveResult.PermissionDenied -> "Save copy aborted: ${result.message}"
+            val customAction = pendingCreateDocumentAction
+            if (customAction != null) {
+                pendingCreateDocumentAction = null
+                customAction(destinationUri)
+            } else {
+                viewerViewModel.saveCopyToUriWithResult(destinationUri) { result: SaveResult ->
+                    val msg = when (result) {
+                        is SaveResult.Success -> "Saved copy successfully"
+                        is SaveResult.WriteFailedOriginalRestored -> "Save copy failed during write. Target restored."
+                        is SaveResult.WriteFailedRestoreFailed -> "Save copy failed: ${result.message}"
+                        is SaveResult.ValidationFailed -> "Save copy aborted: validation failed."
+                        is SaveResult.PermissionDenied -> "Save copy aborted: ${result.message}"
+                    }
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
                 }
-                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
             }
+        } else {
+            pendingCreateDocumentAction = null
+        }
+    }
+
+    private val mergePdfPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { secondPdfUri: Uri? ->
+        if (secondPdfUri != null) {
+            viewerViewModel.mergePdfWithUri(secondPdfUri) { success ->
+                Toast.makeText(this, if (success) "Merged PDF successfully" else "Failed to merge PDF", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            launchCameraCaptureFallback()
+        } else {
+            Toast.makeText(this, "Camera permission required for scanner fallback", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val cameraFallbackLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && pendingCameraPhotoUri != null) {
+            scanViewModel.setScannedPages(listOf(pendingCameraPhotoUri!!))
+            navigateToScanReview = true
+        }
+    }
+
+    private fun launchCameraCaptureFallback() {
+        try {
+            val cameraScansDir = File(cacheDir, "camera_scans").apply { mkdirs() }
+            val photoFile = File(cameraScansDir, "scan_${System.currentTimeMillis()}.jpg")
+            val photoUri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.fileprovider",
+                photoFile
+            )
+            pendingCameraPhotoUri = photoUri
+            cameraFallbackLauncher.launch(photoUri)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Camera fallback error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -198,6 +254,40 @@ class MainActivity : ComponentActivity() {
                                     val safeFileName = if (fileName.contains('.')) fileName else "$fileName.${current?.format?.extension ?: "docx"}"
                                     createDocumentLauncher.launch(safeFileName)
                                 },
+                                onSplitPdfClick = { from, to ->
+                                    val current = viewerViewModel.uiState.value as? ViewerUiState.Success
+                                    val baseName = current?.documentName?.removeSuffix(".pdf") ?: "document"
+                                    pendingCreateDocumentAction = { destUri ->
+                                        viewerViewModel.splitPdfToUri(from, to, destUri) { result ->
+                                            Toast.makeText(this@MainActivity, if (result is SaveResult.Success) "Pages $from-$to extracted successfully" else "Failed to extract pages", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    createDocumentLauncher.launch("${baseName}_p${from}_p${to}.pdf")
+                                },
+                                onMergePdfClick = {
+                                    mergePdfPickerLauncher.launch(arrayOf("application/pdf", "*/*"))
+                                },
+                                onProtectPdfClick = { password ->
+                                    val current = viewerViewModel.uiState.value as? ViewerUiState.Success
+                                    val baseName = current?.documentName?.removeSuffix(".pdf") ?: "document"
+                                    pendingCreateDocumentAction = { destUri ->
+                                        viewerViewModel.protectPdfToUri(password, destUri) { result ->
+                                            Toast.makeText(this@MainActivity, if (result is SaveResult.Success) "Protected with AES-256" else "Failed to protect PDF", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    createDocumentLauncher.launch("${baseName}_protected.pdf")
+                                },
+                                onLockDocumentClick = { password ->
+                                    val current = viewerViewModel.uiState.value as? ViewerUiState.Success
+                                    val baseName = current?.documentName ?: "document"
+                                    val safeName = if (baseName.contains('.')) "${baseName.substringBeforeLast('.')}.vault" else "$baseName.vault"
+                                    pendingCreateDocumentAction = { destUri ->
+                                        viewerViewModel.lockDocumentToUri(password, destUri) { result ->
+                                            Toast.makeText(this@MainActivity, if (result is SaveResult.Success) "Document encrypted to vault" else "Encryption failed", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    createDocumentLauncher.launch(safeName)
+                                },
                                 viewModel = viewerViewModel
                             )
                         }
@@ -307,8 +397,14 @@ class MainActivity : ComponentActivity() {
                 val intentSender = DocumentScannerManager.getStartScanIntent(this@MainActivity)
                 val request = IntentSenderRequest.Builder(intentSender).build()
                 scannerLauncher.launch(request)
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Scanner: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) {
+                // Fallback to camera capture when Google Play Services Document Scanner is unavailable
+                if (androidx.core.content.ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.CAMERA)
+                    == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    launchCameraCaptureFallback()
+                } else {
+                    cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                }
             }
         }
     }
