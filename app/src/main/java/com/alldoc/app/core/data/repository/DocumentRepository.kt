@@ -7,6 +7,7 @@ import android.provider.OpenableColumns
 import com.alldoc.app.core.data.database.AllDocDatabase
 import com.alldoc.app.core.data.database.DocumentEntity
 import com.alldoc.app.core.data.database.DocumentVersionEntity
+import com.alldoc.app.core.engine.FileSniffer
 import com.alldoc.app.core.model.Document
 import com.alldoc.app.core.model.DocumentCategory
 import com.alldoc.app.core.model.DocumentFormat
@@ -63,13 +64,16 @@ class DocumentRepository(
             existing.toDomainModel().copy(
                 lastAccessed = System.currentTimeMillis(),
                 sizeBytes = if (metadata.sizeBytes > 0) metadata.sizeBytes else existing.sizeBytes,
-                name = metadata.name.ifEmpty { existing.name }
+                name = metadata.name.ifEmpty { existing.name },
+                format = if (metadata.format != DocumentFormat.UNKNOWN) metadata.format else existing.toDomainModel().format
             )
         } else {
             metadata
         }
 
-        dao.insertOrUpdate(DocumentEntity.fromDomain(document, searchContent))
+        // Preserve existing searchContent if searchContent argument is null
+        val finalSearchContent = searchContent ?: existing?.searchContent
+        dao.insertOrUpdate(DocumentEntity.fromDomain(document, finalSearchContent))
         document
     }
 
@@ -91,6 +95,27 @@ class DocumentRepository(
         } catch (_: Exception) {
             // Content URIs may be owned by external providers
         }
+    }
+
+    suspend fun saveSnapshotVersion(uriString: String, file: File, note: String? = null): DocumentVersionEntity = withContext(Dispatchers.IO) {
+        val versionsDir = File(context.filesDir, "versions").apply { mkdirs() }
+        val filename = "snapshot_${System.currentTimeMillis()}_${file.length()}.bak"
+        val snapshotFile = File(versionsDir, filename)
+
+        file.inputStream().use { input ->
+            FileOutputStream(snapshotFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+
+        val entity = DocumentVersionEntity(
+            documentUri = uriString,
+            snapshotFilePath = snapshotFile.absolutePath,
+            versionNote = note,
+            sizeBytes = file.length()
+        )
+        dao.insertVersion(entity)
+        entity
     }
 
     suspend fun saveSnapshotVersion(uriString: String, bytes: ByteArray, note: String? = null): DocumentVersionEntity = withContext(Dispatchers.IO) {
@@ -149,7 +174,14 @@ class DocumentRepository(
             null
         }
 
-        val format = DocumentFormat.fromMimeType(mimeType, name)
+        // Sniff real format by inspecting header bytes first
+        val format = try {
+            contentResolver.openInputStream(uri)?.use { stream ->
+                FileSniffer.sniffFormat(stream, name, mimeType)
+            } ?: DocumentFormat.fromMimeType(mimeType, name)
+        } catch (_: Throwable) {
+            DocumentFormat.fromMimeType(mimeType, name)
+        }
 
         return Document(
             uriString = uri.toString(),

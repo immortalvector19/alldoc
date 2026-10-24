@@ -4,7 +4,10 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.widget.Toast
+import java.io.File
+import java.io.FileOutputStream
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,18 +17,15 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
+import com.alldoc.app.core.engine.SaveResult
 import com.alldoc.app.core.engine.scanner.DocumentScannerManager
 import com.alldoc.app.core.model.Document
 import com.alldoc.app.presentation.home.HomeScreen
@@ -35,11 +35,9 @@ import com.alldoc.app.presentation.scanner.ScanViewModel
 import com.alldoc.app.presentation.theme.AllDocTheme
 import com.alldoc.app.presentation.viewer.DocumentViewerScreen
 import com.alldoc.app.presentation.viewer.DocumentViewerViewModel
+import com.alldoc.app.presentation.viewer.ViewerUiState
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import java.io.File
-import java.net.URLDecoder
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 class MainActivity : ComponentActivity() {
 
@@ -47,13 +45,34 @@ class MainActivity : ComponentActivity() {
     private val viewerViewModel: DocumentViewerViewModel by viewModels()
     private val scanViewModel: ScanViewModel by viewModels()
 
-    // File picker launcher (Storage Access Framework)
+    // Pending document URI queue consumed by NavHost upon readiness
+    private val pendingDocumentUri = MutableStateFlow<Uri?>(null)
+
+    // Storage Access Framework Picker (launches with */* so all document types are selectable)
     private val filePickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
             takePersistablePermission(uri)
-            openDocumentInViewer(uri)
+            pendingDocumentUri.value = uri
+        }
+    }
+
+    // Save a Copy launcher (Storage Access Framework Create Document)
+    private val createDocumentLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("*/*")
+    ) { destinationUri: Uri? ->
+        if (destinationUri != null) {
+            viewerViewModel.saveCopyToUriWithResult(destinationUri) { result: SaveResult ->
+                val msg = when (result) {
+                    is SaveResult.Success -> "Saved copy successfully"
+                    is SaveResult.WriteFailedOriginalRestored -> "Save copy failed during write. Target restored."
+                    is SaveResult.WriteFailedRestoreFailed -> "Save copy failed: ${result.message}"
+                    is SaveResult.ValidationFailed -> "Save copy aborted: validation failed."
+                    is SaveResult.PermissionDenied -> "Save copy aborted: ${result.message}"
+                }
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -70,21 +89,25 @@ class MainActivity : ComponentActivity() {
                 if (!pages.isNullOrEmpty()) {
                     val pageUris = pages.map { it.imageUri }
                     scanViewModel.setScannedPages(pageUris)
-                    navControllerHolder?.navigate("scan_review")
+                    // Request navigation to scan review
+                    navigateToScanReview = true
                 } else if (pdfUri != null) {
-                    openDocumentInViewer(pdfUri)
+                    pendingDocumentUri.value = pdfUri
                 }
             }
         }
     }
 
-    private var navControllerHolder: androidx.navigation.NavHostController? = null
+    private var navigateToScanReview = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        handleIncomingIntent(intent)
+        // Only parse incoming intent on fresh cold start (not on process restoration/rotation)
+        if (savedInstanceState == null) {
+            handleIncomingIntent(intent)
+        }
 
         setContent {
             AllDocTheme {
@@ -93,7 +116,27 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
-                    navControllerHolder = navController
+
+                    // Reactively navigate when a document is pending
+                    val pendingUri by pendingDocumentUri.collectAsState()
+                    LaunchedEffect(pendingUri) {
+                        val uri = pendingUri ?: return@LaunchedEffect
+                        viewerViewModel.loadDocument(uri)
+                        pendingDocumentUri.value = null
+                        navController.navigate("viewer") {
+                            launchSingleTop = true
+                        }
+                    }
+
+                    // Check if scan review is requested
+                    LaunchedEffect(navigateToScanReview) {
+                        if (navigateToScanReview) {
+                            navigateToScanReview = false
+                            navController.navigate("scan_review") {
+                                launchSingleTop = true
+                            }
+                        }
+                    }
 
                     NavHost(
                         navController = navController,
@@ -108,7 +151,7 @@ class MainActivity : ComponentActivity() {
                                 onSearchQueryChanged = { homeViewModel.updateSearchQuery(it) },
                                 onDocumentClick = { doc ->
                                     val uri = Uri.parse(doc.uriString)
-                                    openDocumentInViewer(uri)
+                                    pendingDocumentUri.value = uri
                                 },
                                 onToggleFavorite = { uriStr, isFav ->
                                     homeViewModel.toggleFavorite(uriStr, isFav)
@@ -120,51 +163,40 @@ class MainActivity : ComponentActivity() {
                                 onShareDocument = { shareDocument(it) },
                                 onScanClick = { startDocumentScan() },
                                 onOpenFilePicker = {
-                                    filePickerLauncher.launch(
-                                        arrayOf(
-                                            "application/pdf",
-                                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                            "application/msword",
-                                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                            "application/vnd.ms-excel",
-                                            "text/csv",
-                                            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                                            "application/vnd.ms-powerpoint",
-                                            "text/plain",
-                                            "text/markdown",
-                                            "application/rtf",
-                                            "image/*"
-                                        )
-                                    )
+                                    filePickerLauncher.launch(arrayOf("*/*"))
                                 }
                             )
                         }
 
-                        composable(
-                            route = "viewer/{encodedUri}",
-                            arguments = listOf(navArgument("encodedUri") { type = NavType.StringType })
-                        ) { backStackEntry ->
-                            val encodedUri = backStackEntry.arguments?.getString("encodedUri") ?: ""
-                            val uriString = URLDecoder.decode(encodedUri, StandardCharsets.UTF_8.name())
-                            val uri = Uri.parse(uriString)
-
-                            LaunchedEffect(uriString) {
-                                viewerViewModel.loadDocument(uri)
-                            }
-
+                        composable("viewer") {
                             val viewerState by viewerViewModel.uiState.collectAsState()
                             DocumentViewerScreen(
                                 uiState = viewerState,
                                 onBackClick = { navController.popBackStack() },
                                 onSaveClick = {
-                                    viewerViewModel.saveDocument { success ->
-                                        if (success) {
-                                            Toast.makeText(this@MainActivity, "Saved successfully", Toast.LENGTH_SHORT).show()
+                                    viewerViewModel.saveDocumentWithResult { result: SaveResult ->
+                                        val msg = when (result) {
+                                            is SaveResult.Success -> "Saved successfully"
+                                            is SaveResult.WriteFailedOriginalRestored -> "Save failed during write. Original restored from backup."
+                                            is SaveResult.WriteFailedRestoreFailed -> "CRITICAL: Save and restore failed. Backup preserved at ${result.backupFile.name}"
+                                            is SaveResult.ValidationFailed -> "Save aborted: validation failed. Original left untouched."
+                                            is SaveResult.PermissionDenied -> "Save aborted: ${result.message}"
                                         }
+                                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
                                     }
                                 },
                                 onShareClick = {
-                                    shareUri(uri)
+                                    val uri = viewerViewModel.activeUri
+                                    if (uri != null) shareUri(uri)
+                                },
+                                onOpenInAnotherApp = { uri ->
+                                    openInAnotherApp(uri)
+                                },
+                                onSaveCopyClick = {
+                                    val current = viewerViewModel.uiState.value as? ViewerUiState.Success
+                                    val fileName = current?.documentName ?: "document_copy"
+                                    val safeFileName = if (fileName.contains('.')) fileName else "$fileName.${current?.format?.extension ?: "docx"}"
+                                    createDocumentLauncher.launch(safeFileName)
                                 },
                                 viewModel = viewerViewModel
                             )
@@ -183,7 +215,7 @@ class MainActivity : ComponentActivity() {
                                     scanViewModel.compileToPdf(title) { compiledUri ->
                                         if (compiledUri != null) {
                                             navController.popBackStack()
-                                            openDocumentInViewer(compiledUri)
+                                            pendingDocumentUri.value = compiledUri
                                         } else {
                                             Toast.makeText(this@MainActivity, "Failed to compile PDF", Toast.LENGTH_SHORT).show()
                                         }
@@ -199,6 +231,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleIncomingIntent(intent)
     }
 
@@ -208,30 +241,63 @@ class MainActivity : ComponentActivity() {
         val data = intent.data
 
         if ((Intent.ACTION_VIEW == action || Intent.ACTION_EDIT == action) && data != null) {
-            takePersistablePermission(data)
-            openDocumentInViewer(data)
+            val persistable = takePersistablePermission(data)
+            val uriToUse = if (!persistable) cacheIncomingUri(data) else data
+            pendingDocumentUri.value = uriToUse
         } else if (Intent.ACTION_SEND == action) {
             val streamUri = androidx.core.content.IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             if (streamUri != null) {
-                takePersistablePermission(streamUri)
-                openDocumentInViewer(streamUri)
+                val persistable = takePersistablePermission(streamUri)
+                val uriToUse = if (!persistable) cacheIncomingUri(streamUri) else streamUri
+                pendingDocumentUri.value = uriToUse
+            }
+        } else if (Intent.ACTION_SEND_MULTIPLE == action) {
+            val streamUris = androidx.core.content.IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+            val firstUri = streamUris?.firstOrNull()
+            if (firstUri != null) {
+                val persistable = takePersistablePermission(firstUri)
+                val uriToUse = if (!persistable) cacheIncomingUri(firstUri) else firstUri
+                pendingDocumentUri.value = uriToUse
             }
         }
     }
 
-    private fun takePersistablePermission(uri: Uri) {
-        try {
-            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            contentResolver.takePersistableUriPermission(uri, flags)
+    private fun cacheIncomingUri(uri: Uri): Uri {
+        return try {
+            val cachedDocsDir = File(filesDir, "cached_docs").apply { mkdirs() }
+            val fileName = queryDisplayName(uri) ?: "shared_${System.currentTimeMillis()}"
+            val targetFile = File(cachedDocsDir, fileName)
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(targetFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Uri.fromFile(targetFile)
         } catch (_: Exception) {
-            // Some providers don't support persistable permissions
+            uri // Fallback to raw URI if caching fails
         }
     }
 
-    private fun openDocumentInViewer(uri: Uri) {
-        val encodedUri = URLEncoder.encode(uri.toString(), StandardCharsets.UTF_8.name())
-        navControllerHolder?.navigate("viewer/$encodedUri") {
-            launchSingleTop = true
+    private fun queryDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) cursor.getString(nameIndex) else null
+                } else null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun takePersistablePermission(uri: Uri): Boolean {
+        return try {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            contentResolver.takePersistableUriPermission(uri, flags)
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -262,6 +328,19 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent.createChooser(shareIntent, "Share Document via"))
         } catch (e: Exception) {
             Toast.makeText(this, "Cannot share document: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun openInAnotherApp(uri: Uri) {
+        try {
+            val mimeType = contentResolver.getType(uri) ?: "*/*"
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(viewIntent, "Open with"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "No app found to open this document: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
         }
     }
 }
