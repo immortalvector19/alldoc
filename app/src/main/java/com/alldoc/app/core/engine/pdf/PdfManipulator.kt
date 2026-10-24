@@ -91,7 +91,7 @@ object PdfManipulator {
         PDDocument.load(sourceFile).use { doc ->
             val ap = AccessPermission()
             val spp = StandardProtectionPolicy(password, password, ap).apply {
-                encryptionKeyLength = 128
+                encryptionKeyLength = 256
             }
             doc.protect(spp)
             doc.save(destFile)
