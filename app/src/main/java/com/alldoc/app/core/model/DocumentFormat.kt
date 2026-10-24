@@ -21,6 +21,7 @@ enum class DocumentFormat(
     IMAGE_JPEG("jpg", "image/jpeg", "JPEG Image", DocumentCategory.IMAGE, false),
     IMAGE_PNG("png", "image/png", "PNG Image", DocumentCategory.IMAGE, false),
     IMAGE_WEBP("webp", "image/webp", "WebP Image", DocumentCategory.IMAGE, false),
+    VAULT("vault", "application/x-alldoc-vault", "Encrypted Vault", DocumentCategory.OTHER, false),
     UNKNOWN("bin", "application/octet-stream", "Generic File", DocumentCategory.OTHER, false);
 
     companion object {
@@ -30,6 +31,7 @@ enum class DocumentFormat(
                 "jpeg" -> IMAGE_JPEG
                 "text", "log" -> TXT
                 "markdown" -> MARKDOWN
+                "enc", "vault" -> VAULT
                 else -> UNKNOWN
             }
         }
@@ -43,6 +45,7 @@ enum class DocumentFormat(
             if (mime == null) return UNKNOWN
             return entries.firstOrNull { it.mimeType.equals(mime, ignoreCase = true) }
                 ?: when {
+                    mime.contains("vault", ignoreCase = true) -> VAULT
                     mime.contains("pdf", ignoreCase = true) -> PDF
                     mime.contains("wordprocessingml", ignoreCase = true) -> DOCX
                     mime.contains("msword", ignoreCase = true) -> DOC

@@ -23,6 +23,7 @@ object FileSniffer {
     )
     private val GIF_MAGIC = "GIF8".toByteArray(StandardCharsets.US_ASCII)
     private val RTF_MAGIC = "{\\rtf".toByteArray(StandardCharsets.US_ASCII)
+    private val VAULT_MAGIC = "ALLDOC_VAULT_V1\n".toByteArray(StandardCharsets.US_ASCII)
 
     /**
      * Sniffs the real format of an InputStream using magic bytes, with fallback to filename/MIME.
@@ -41,6 +42,11 @@ object FileSniffer {
 
         if (readCount <= 0) {
             return DocumentFormat.fromMimeType(mimeType, filename)
+        }
+
+        // 0. Sniff Encrypted Vault
+        if (matchesPrefix(header, VAULT_MAGIC)) {
+            return DocumentFormat.VAULT
         }
 
         // 1. Sniff PDF: %PDF in first 1024 bytes
