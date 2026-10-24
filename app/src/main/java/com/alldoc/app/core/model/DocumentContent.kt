@@ -63,7 +63,9 @@ data class WordDocumentModel(
 
 data class SpreadsheetDocumentModel(
     override val uriString: String,
-    val workbook: SpreadsheetWorkbook = SpreadsheetWorkbook()
+    val workbook: SpreadsheetWorkbook = SpreadsheetWorkbook(),
+    val uneditedZipParts: Map<String, ByteArray> = emptyMap(),
+    val sheetPartPaths: Map<Int, String> = emptyMap()
 ) : DocumentContent {
     override val format: DocumentFormat = DocumentFormat.XLSX
 }

@@ -11,10 +11,18 @@ import com.alldoc.app.core.model.DocumentAnnotations
 import com.tom_roush.pdfbox.multipdf.PDFMergerUtility
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
+import com.tom_roush.pdfbox.pdmodel.PDPageContentStream
+import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
 import com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission
 import com.tom_roush.pdfbox.pdmodel.encryption.StandardProtectionPolicy
+import com.tom_roush.pdfbox.pdmodel.font.PDFont
+import com.tom_roush.pdfbox.pdmodel.font.PDType0Font
+import com.tom_roush.pdfbox.pdmodel.font.PDType1Font
+import com.tom_roush.pdfbox.pdmodel.graphics.blend.BlendMode
+import com.tom_roush.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -91,112 +99,231 @@ object PdfManipulator {
     }
 
     /**
-     * Flattens vector annotations (ink, highlights, notes, signatures) onto the pages
-     * of a PDF and exports the flattened PDF.
+     * Lossless vector annotation export: Appends vector annotations directly onto the
+     * original PDF content streams using PdfBox-Android without rasterizing pages.
+     * Text streams, fonts, links, and forms remain 100% vector-sharp and searchable.
      */
     suspend fun exportWithAnnotations(
-        rendererEngine: PdfRendererEngine,
+        sourcePdfFile: File,
         annotations: DocumentAnnotations,
         outputStream: OutputStream
     ) = withContext(Dispatchers.IO) {
-        val pdfDocument = PdfDocument()
+        PDDocument.load(sourcePdfFile).use { doc ->
+            applyAnnotationsToDoc(doc, annotations)
+            doc.save(outputStream)
+        }
+    }
 
-        for (pageIndex in 0 until rendererEngine.pageCount) {
-            val (baseWidth, baseHeight) = rendererEngine.getPageDimensions(pageIndex)
-            val w = if (baseWidth > 0) baseWidth else 595
-            val h = if (baseHeight > 0) baseHeight else 842
+    suspend fun exportWithAnnotations(
+        sourcePdfBytes: ByteArray,
+        annotations: DocumentAnnotations,
+        outputStream: OutputStream
+    ) = withContext(Dispatchers.IO) {
+        PDDocument.load(ByteArrayInputStream(sourcePdfBytes)).use { doc ->
+            applyAnnotationsToDoc(doc, annotations)
+            doc.save(outputStream)
+        }
+    }
 
-            val pageInfo = PdfDocument.PageInfo.Builder(w, h, pageIndex + 1).create()
-            val page = pdfDocument.startPage(pageInfo)
-            val canvas = page.canvas
+    private fun applyAnnotationsToDoc(doc: PDDocument, annotations: DocumentAnnotations) {
+        val highlightGState = PDExtendedGraphicsState().apply {
+            nonStrokingAlphaConstant = 0.35f
+            blendMode = BlendMode.MULTIPLY
+        }
+        val normalGState = PDExtendedGraphicsState().apply {
+            nonStrokingAlphaConstant = 1.0f
+            blendMode = BlendMode.NORMAL
+        }
 
-            // 1. Render the base page bitmap
-            val bitmap = rendererEngine.renderPage(pageIndex, scaleFactor = 1.0f)
-            if (bitmap != null) {
-                canvas.drawBitmap(bitmap, 0f, 0f, null)
-            }
-
-            // 2. Draw Vector Annotations on top of the page
+        for (pageIndex in 0 until doc.numberOfPages) {
             val pageAnnotations = annotations.forPage(pageIndex)
-            val paint = Paint().apply { isAntiAlias = true }
+            if (pageAnnotations.isEmpty()) continue
 
-            for (annotation in pageAnnotations) {
-                when (annotation) {
-                    is Annotation.InkStroke -> {
-                        paint.color = annotation.colorArgb.toInt()
-                        paint.strokeWidth = annotation.strokeWidth
-                        paint.style = Paint.Style.STROKE
-                        paint.strokeCap = Paint.Cap.ROUND
-                        paint.strokeJoin = Paint.Join.ROUND
+            val page = doc.getPage(pageIndex)
+            val cropBox = page.cropBox ?: page.mediaBox
+            val rotation = page.rotation
 
-                        if (annotation.points.size > 1) {
-                            val path = Path()
-                            val first = annotation.points.first()
-                            path.moveTo(first.x, first.y)
-                            for (p in annotation.points.drop(1)) {
-                                path.lineTo(p.x, p.y)
-                            }
-                            canvas.drawPath(path, paint)
-                        }
-                    }
+            PDPageContentStream(doc, page, PDPageContentStream.AppendMode.APPEND, true, true).use { cs ->
+                for (annotation in pageAnnotations) {
+                    when (annotation) {
+                        is Annotation.InkStroke -> {
+                            val r = ((annotation.colorArgb.toInt() shr 16) and 0xFF) / 255f
+                            val g = ((annotation.colorArgb.toInt() shr 8) and 0xFF) / 255f
+                            val b = (annotation.colorArgb.toInt() and 0xFF) / 255f
+                            cs.setStrokingColor(r, g, b)
+                            cs.setLineWidth(annotation.strokeWidth)
 
-                    is Annotation.Highlight -> {
-                        paint.color = annotation.colorArgb.toInt()
-                        paint.style = Paint.Style.FILL
-                        canvas.drawRect(
-                            annotation.boundsLeft,
-                            annotation.boundsTop,
-                            annotation.boundsRight,
-                            annotation.boundsBottom,
-                            paint
-                        )
-                    }
-
-                    is Annotation.TextNote -> {
-                        // Draw background box
-                        annotation.backgroundArgb?.let { bg ->
-                            paint.color = bg.toInt()
-                            paint.style = Paint.Style.FILL
-                            canvas.drawRect(
-                                annotation.x - 4f,
-                                annotation.y - annotation.fontSizeSp - 4f,
-                                annotation.x + (annotation.text.length * annotation.fontSizeSp * 0.6f) + 8f,
-                                annotation.y + 8f,
-                                paint
-                            )
-                        }
-                        // Draw text
-                        paint.color = annotation.colorArgb.toInt()
-                        paint.style = Paint.Style.FILL
-                        paint.textSize = annotation.fontSizeSp
-                        canvas.drawText(annotation.text, annotation.x, annotation.y, paint)
-                    }
-
-                    is Annotation.SignatureStamp -> {
-                        paint.color = annotation.colorArgb.toInt()
-                        paint.strokeWidth = 3f
-                        paint.style = Paint.Style.STROKE
-                        paint.strokeCap = Paint.Cap.ROUND
-                        paint.strokeJoin = Paint.Join.ROUND
-
-                        for (stroke in annotation.paths) {
-                            if (stroke.size > 1) {
-                                val path = Path()
-                                path.moveTo(stroke.first().x, stroke.first().y)
-                                for (p in stroke.drop(1)) {
-                                    path.lineTo(p.x, p.y)
+                            if (annotation.points.size > 1) {
+                                val first = transformPoint(annotation.points.first().x, annotation.points.first().y, cropBox, rotation)
+                                cs.moveTo(first.first, first.second)
+                                for (p in annotation.points.drop(1)) {
+                                    val pt = transformPoint(p.x, p.y, cropBox, rotation)
+                                    cs.lineTo(pt.first, pt.second)
                                 }
-                                canvas.drawPath(path, paint)
+                                cs.stroke()
+                            }
+                        }
+
+                        is Annotation.Highlight -> {
+                            val r = ((annotation.colorArgb.toInt() shr 16) and 0xFF) / 255f
+                            val g = ((annotation.colorArgb.toInt() shr 8) and 0xFF) / 255f
+                            val b = (annotation.colorArgb.toInt() and 0xFF) / 255f
+
+                            // Apply Multiply blend mode & 35% alpha so underlying text stays 100% visible
+                            cs.setGraphicsStateParameters(highlightGState)
+                            cs.setNonStrokingColor(r, g, b)
+
+                            val p1 = transformPoint(annotation.boundsLeft, annotation.boundsBottom, cropBox, rotation)
+                            val p2 = transformPoint(annotation.boundsRight, annotation.boundsTop, cropBox, rotation)
+                            val x = minOf(p1.first, p2.first)
+                            val y = minOf(p1.second, p2.second)
+                            val w = Math.abs(p2.first - p1.first)
+                            val h = Math.abs(p2.second - p1.second)
+
+                            cs.addRect(x, y, w, h)
+                            cs.fill()
+
+                            // Restore normal graphics state
+                            cs.setGraphicsStateParameters(normalGState)
+                        }
+
+                        is Annotation.TextNote -> {
+                            val r = ((annotation.colorArgb.toInt() shr 16) and 0xFF) / 255f
+                            val g = ((annotation.colorArgb.toInt() shr 8) and 0xFF) / 255f
+                            val b = (annotation.colorArgb.toInt() and 0xFF) / 255f
+                            try {
+                                val font = getFontForText(doc, annotation.text)
+                                val pt = transformPoint(annotation.x, annotation.y, cropBox, rotation)
+
+                                cs.beginText()
+                                cs.setFont(font, annotation.fontSizeSp)
+                                cs.setNonStrokingColor(r, g, b)
+                                cs.newLineAtOffset(pt.first, pt.second)
+                                cs.showText(annotation.text)
+                                cs.endText()
+                            } catch (_: Exception) {
+                                // If the font lacks specific glyphs, attempt ASCII fallback
+                                try {
+                                    cs.beginText()
+                                    cs.setFont(PDType1Font.HELVETICA_BOLD, annotation.fontSizeSp)
+                                    cs.setNonStrokingColor(r, g, b)
+                                    val pt = transformPoint(annotation.x, annotation.y, cropBox, rotation)
+                                    cs.newLineAtOffset(pt.first, pt.second)
+                                    val ascii = annotation.text.filter { it.code in 32..126 }
+                                    cs.showText(ascii)
+                                    cs.endText()
+                                } catch (_: Exception) {}
+                            }
+                        }
+
+                        is Annotation.SignatureStamp -> {
+                            val r = ((annotation.colorArgb.toInt() shr 16) and 0xFF) / 255f
+                            val g = ((annotation.colorArgb.toInt() shr 8) and 0xFF) / 255f
+                            val b = (annotation.colorArgb.toInt() and 0xFF) / 255f
+                            cs.setStrokingColor(r, g, b)
+                            cs.setLineWidth(3f)
+
+                            for (stroke in annotation.paths) {
+                                if (stroke.size > 1) {
+                                    val first = transformPoint(stroke.first().x, stroke.first().y, cropBox, rotation)
+                                    cs.moveTo(first.first, first.second)
+                                    for (p in stroke.drop(1)) {
+                                        val pt = transformPoint(p.x, p.y, cropBox, rotation)
+                                        cs.lineTo(pt.first, pt.second)
+                                    }
+                                    cs.stroke()
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+    }
 
-            pdfDocument.finishPage(page)
+    /**
+     * Converts viewer display coordinates (where origin is top-left of the upright displayed page)
+     * to PDF user space coordinates (where origin is lowerLeft of CropBox/MediaBox).
+     * Correctly handles CropBox offsets and page rotations (0, 90, 180, 270 degrees).
+     */
+    fun transformPoint(viewX: Float, viewY: Float, cropBox: PDRectangle, rotation: Int): Pair<Float, Float> {
+        val normRot = ((rotation % 360) + 360) % 360
+        return when (normRot) {
+            90 -> {
+                val pdfX = cropBox.lowerLeftX + viewY
+                val pdfY = cropBox.lowerLeftY + viewX
+                Pair(pdfX, pdfY)
+            }
+            180 -> {
+                val pdfX = cropBox.lowerLeftX + (cropBox.width - viewX)
+                val pdfY = cropBox.lowerLeftY + viewY
+                Pair(pdfX, pdfY)
+            }
+            270 -> {
+                val pdfX = cropBox.lowerLeftX + (cropBox.width - viewY)
+                val pdfY = cropBox.lowerLeftY + (cropBox.height - viewX)
+                Pair(pdfX, pdfY)
+            }
+            else -> { // 0 degrees
+                val pdfX = cropBox.lowerLeftX + viewX
+                val pdfY = cropBox.lowerLeftY + (cropBox.height - viewY)
+                Pair(pdfX, pdfY)
+            }
+        }
+    }
+
+    private fun getFontForText(doc: PDDocument, text: String): PDFont {
+        val hasCjk = text.any { it.code in 0x4E00..0x9FFF }
+        val hasArabic = text.any { it.code in 0x0600..0x06FF }
+
+        if (hasCjk) {
+            val cjkFile = listOf(
+                File("/system/fonts/NotoSansCJK-Regular.ttc"),
+                File("/system/fonts/DroidSansFallback.ttf"),
+                File("C:/Windows/Fonts/msyh.ttc"),
+                File("C:/Windows/Fonts/simsun.ttc")
+            ).firstOrNull { it.exists() }
+            if (cjkFile != null) {
+                try {
+                    return PDType0Font.load(doc, cjkFile)
+                } catch (_: Exception) {}
+            }
         }
 
-        pdfDocument.writeTo(outputStream)
-        pdfDocument.close()
+        if (hasArabic) {
+            val arabicFile = listOf(
+                File("/system/fonts/NotoNaskhArabic-Regular.ttf"),
+                File("C:/Windows/Fonts/arial.ttf")
+            ).firstOrNull { it.exists() }
+            if (arabicFile != null) {
+                try {
+                    return PDType0Font.load(doc, arabicFile)
+                } catch (_: Exception) {}
+            }
+        }
+
+        // For Latin Extended, Yoruba ("Ẹ̀kọ́ ṣe àṣeyọrí"), and general Unicode:
+        val resourceStream = PdfManipulator::class.java.classLoader?.getResourceAsStream("com/tom_roush/pdfbox/resources/ttf/LiberationSans-Regular.ttf")
+            ?: PdfManipulator::class.java.getResourceAsStream("/com/tom_roush/pdfbox/resources/ttf/LiberationSans-Regular.ttf")
+            ?: PdfManipulator::class.java.classLoader?.getResourceAsStream("assets/com/tom_roush/pdfbox/resources/ttf/LiberationSans-Regular.ttf")
+
+        if (resourceStream != null) {
+            try {
+                return PDType0Font.load(doc, resourceStream)
+            } catch (_: Exception) {}
+        }
+
+        val sysFallback = listOf(
+            File("/system/fonts/Roboto-Regular.ttf"),
+            File("C:/Windows/Fonts/arial.ttf")
+        ).firstOrNull { it.exists() }
+
+        if (sysFallback != null) {
+            try {
+                return PDType0Font.load(doc, sysFallback)
+            } catch (_: Exception) {}
+        }
+
+        return PDType1Font.HELVETICA_BOLD
     }
 }
