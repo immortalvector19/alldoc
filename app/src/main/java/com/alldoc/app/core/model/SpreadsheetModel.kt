@@ -103,6 +103,7 @@ data class CellData(
     val rawValue: String = "",
     val formula: String? = null,
     val computedValue: String? = null,
+    val cachedFormulaValue: String? = null,
     val isBold: Boolean = false,
     val isItalic: Boolean = false,
     val textColor: Long? = null,
@@ -111,7 +112,7 @@ data class CellData(
     val originalFormula: String? = formula
 ) {
     val displayValue: String
-        get() = computedValue ?: rawValue
+        get() = computedValue ?: cachedFormulaValue ?: rawValue
 
     val isEmpty: Boolean
         get() = rawValue.isEmpty() && formula.isNullOrEmpty()

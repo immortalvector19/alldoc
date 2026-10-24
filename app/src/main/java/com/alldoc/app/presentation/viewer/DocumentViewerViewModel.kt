@@ -13,6 +13,7 @@ import com.alldoc.app.core.engine.FileSniffer
 import com.alldoc.app.core.engine.SafeDocumentWriter
 import com.alldoc.app.core.engine.SaveResult
 import com.alldoc.app.core.engine.legacy.Ole2Engine
+import com.alldoc.app.core.engine.security.DocumentCryptoEngine
 import com.alldoc.app.core.engine.openxml.CsvEngine
 import com.alldoc.app.core.engine.openxml.DocxEngine
 import com.alldoc.app.core.engine.openxml.PptxEngine
@@ -209,6 +210,15 @@ class DocumentViewerViewModel @JvmOverloads constructor(
                             ImageDocumentModel(uriString = uri.toString())
                         }
 
+                        DocumentFormat.VAULT -> {
+                            _uiState.value = ViewerUiState.PasswordRequired(
+                                documentName = metadata.name,
+                                uri = uri,
+                                errorMessage = null
+                            )
+                            return@withContext
+                        }
+
                         DocumentFormat.UNKNOWN -> {
                             _uiState.value = ViewerUiState.UnsupportedFormat(
                                 documentName = metadata.name,
@@ -314,6 +324,297 @@ class DocumentViewerViewModel @JvmOverloads constructor(
             }
         } ?: throw IllegalStateException("Cannot open input stream for $uri")
         return cacheFile
+    }
+
+    // PDF Tools operations
+    fun rotatePdf(degrees: Int, allPages: Boolean, currentPage: Int = 1, onComplete: (Boolean) -> Unit) {
+        val current = _uiState.value as? ViewerUiState.Success ?: run { onComplete(false); return }
+        val uri = activeUri ?: run { onComplete(false); return }
+        val pdfModel = current.content as? PdfDocumentModel ?: run { onComplete(false); return }
+
+        viewModelScope.launch {
+            val success = withContext(Dispatchers.IO) {
+                try {
+                    val cacheDir = getApplication<Application>().cacheDir
+                    val srcFile = copyStreamToCache(uri, "pdf_rot_src_", ".pdf")
+                    val destFile = File.createTempFile("pdf_rot_dest_", ".pdf", cacheDir)
+
+                    val pageOrder = (0 until pdfModel.pageCount).toList()
+                    val rotationMap = if (allPages) {
+                        pageOrder.associateWith { degrees }
+                    } else {
+                        mapOf((currentPage - 1).coerceIn(0, pdfModel.pageCount - 1) to degrees)
+                    }
+
+                    PdfManipulator.reorderAndRotate(srcFile, destFile, pageOrder, rotationMap)
+                    srcFile.delete()
+
+                    val pfd = ParcelFileDescriptor.open(destFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                    val engine = PdfRendererEngine(pfd)
+                    current.pdfRendererEngine?.close()
+
+                    withContext(Dispatchers.Main) {
+                        _uiState.value = current.copy(
+                            content = pdfModel.copy(pageCount = engine.pageCount),
+                            pdfRendererEngine = engine,
+                            isModified = true
+                        )
+                    }
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            onComplete(success)
+        }
+    }
+
+    fun splitPdfToUri(fromPage: Int, toPage: Int, destUri: Uri, onResult: (SaveResult) -> Unit) {
+        val uri = activeUri ?: run { onResult(SaveResult.ValidationFailed("No active URI")); return }
+        viewModelScope.launch {
+            val contentResolver = getApplication<Application>().contentResolver
+            val cacheDir = getApplication<Application>().cacheDir
+            val sink = ContentResolverStorageSink(contentResolver, destUri)
+
+            val result = SafeDocumentWriter.safeWrite(
+                sink = sink,
+                cacheDir = cacheDir,
+                writeStagedFile = { _: File, stagedOut: OutputStream ->
+                    val srcFile = copyStreamToCache(uri, "pdf_split_src_", ".pdf")
+                    val tempSplit = File.createTempFile("pdf_split_out_", ".pdf", cacheDir)
+                    try {
+                        PdfManipulator.split(srcFile, fromPage, toPage, tempSplit)
+                        tempSplit.inputStream().use { it.copyTo(stagedOut) }
+                    } finally {
+                        srcFile.delete()
+                        tempSplit.delete()
+                    }
+                },
+                validateStagedFile = { stagedFile: File ->
+                    validateSavedFile(stagedFile, DocumentFormat.PDF)
+                }
+            )
+            onResult(result)
+        }
+    }
+
+    fun mergePdfWithUri(secondPdfUri: Uri, onComplete: (Boolean) -> Unit) {
+        val current = _uiState.value as? ViewerUiState.Success ?: run { onComplete(false); return }
+        val uri = activeUri ?: run { onComplete(false); return }
+        val pdfModel = current.content as? PdfDocumentModel ?: run { onComplete(false); return }
+
+        viewModelScope.launch {
+            val success = withContext(Dispatchers.IO) {
+                try {
+                    val cacheDir = getApplication<Application>().cacheDir
+                    val firstFile = copyStreamToCache(uri, "pdf_merge_1_", ".pdf")
+                    val secondFile = copyStreamToCache(secondPdfUri, "pdf_merge_2_", ".pdf")
+                    val destFile = File.createTempFile("pdf_merged_", ".pdf", cacheDir)
+
+                    try {
+                        PdfManipulator.merge(listOf(firstFile, secondFile), destFile)
+                    } finally {
+                        firstFile.delete()
+                        secondFile.delete()
+                    }
+
+                    val pfd = ParcelFileDescriptor.open(destFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                    val engine = PdfRendererEngine(pfd)
+                    current.pdfRendererEngine?.close()
+
+                    withContext(Dispatchers.Main) {
+                        _uiState.value = current.copy(
+                            content = pdfModel.copy(pageCount = engine.pageCount),
+                            pdfRendererEngine = engine,
+                            isModified = true
+                        )
+                    }
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            onComplete(success)
+        }
+    }
+
+    fun protectPdfToUri(password: String, destUri: Uri, onResult: (SaveResult) -> Unit) {
+        val uri = activeUri ?: run { onResult(SaveResult.ValidationFailed("No active URI")); return }
+        viewModelScope.launch {
+            val contentResolver = getApplication<Application>().contentResolver
+            val cacheDir = getApplication<Application>().cacheDir
+            val sink = ContentResolverStorageSink(contentResolver, destUri)
+
+            val result = SafeDocumentWriter.safeWrite(
+                sink = sink,
+                cacheDir = cacheDir,
+                writeStagedFile = { _: File, stagedOut: OutputStream ->
+                    val srcFile = copyStreamToCache(uri, "pdf_protect_src_", ".pdf")
+                    val tempProtected = File.createTempFile("pdf_protected_", ".pdf", cacheDir)
+                    try {
+                        PdfManipulator.protectWithPassword(srcFile, tempProtected, password)
+                        tempProtected.inputStream().use { it.copyTo(stagedOut) }
+                    } finally {
+                        srcFile.delete()
+                        tempProtected.delete()
+                    }
+                },
+                validateStagedFile = { stagedFile: File ->
+                    isPdfEncrypted(stagedFile)
+                }
+            )
+            onResult(result)
+        }
+    }
+
+    // Vault Document Unlock & Lock
+    fun unlockVaultDocument(password: CharArray) {
+        val uri = activeUri ?: return
+        viewModelScope.launch {
+            _uiState.value = ViewerUiState.Loading
+            withContext(Dispatchers.IO) {
+                try {
+                    val contentResolver = getApplication<Application>().contentResolver
+                    val encryptedBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: throw IllegalStateException("Cannot read vault file")
+
+                    val decryptedBytes = DocumentCryptoEngine.decrypt(encryptedBytes, password)
+
+                    val innerFormat = java.io.ByteArrayInputStream(decryptedBytes).use {
+                        FileSniffer.sniffFormat(it, uri.lastPathSegment?.removeSuffix(".vault")?.removeSuffix(".enc"))
+                    }
+
+                    var pdfRenderer: PdfRendererEngine? = null
+                    val content: DocumentContent = when (innerFormat) {
+                        DocumentFormat.PDF -> {
+                            val tempPdf = File.createTempFile("unlocked_pdf_", ".pdf", getApplication<Application>().cacheDir)
+                            tempPdf.writeBytes(decryptedBytes)
+                            val pfd = ParcelFileDescriptor.open(tempPdf, ParcelFileDescriptor.MODE_READ_ONLY)
+                            val engine = PdfRendererEngine(pfd)
+                            pdfRenderer = engine
+                            PdfDocumentModel(uriString = uri.toString(), pageCount = engine.pageCount)
+                        }
+                        DocumentFormat.DOCX -> {
+                            java.io.ByteArrayInputStream(decryptedBytes).use { stream ->
+                                DocxEngine.parse(stream, uri.toString())
+                            }
+                        }
+                        DocumentFormat.XLSX -> {
+                            java.io.ByteArrayInputStream(decryptedBytes).use { stream ->
+                                XlsxEngine.parse(stream, uri.toString())
+                            }
+                        }
+                        DocumentFormat.CSV -> {
+                            java.io.ByteArrayInputStream(decryptedBytes).use { stream ->
+                                CsvEngine.parse(stream, uri.toString())
+                            }
+                        }
+                        DocumentFormat.TXT, DocumentFormat.RTF, DocumentFormat.MARKDOWN -> {
+                            java.io.ByteArrayInputStream(decryptedBytes).use { stream ->
+                                TextEngine.parse(stream, uri.toString(), innerFormat)
+                            }
+                        }
+                        else -> {
+                            TextDocumentModel(
+                                uriString = uri.toString(),
+                                text = String(decryptedBytes, Charsets.UTF_8),
+                                format = DocumentFormat.TXT
+                            )
+                        }
+                    }
+
+                    _uiState.value = ViewerUiState.Success(
+                        documentName = (uri.lastPathSegment ?: "Unlocked Document").removeSuffix(".vault").removeSuffix(".enc"),
+                        format = innerFormat,
+                        content = content,
+                        pdfRendererEngine = pdfRenderer,
+                        originalUri = uri,
+                        isCachedCopy = true
+                    )
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    _uiState.value = ViewerUiState.PasswordRequired(
+                        documentName = "Encrypted Document Vault",
+                        uri = uri,
+                        errorMessage = "Incorrect password or corrupt vault file. Please try again."
+                    )
+                }
+            }
+        }
+    }
+
+    fun lockDocumentToUri(password: CharArray, destinationUri: Uri, onResult: (SaveResult) -> Unit) {
+        val current = _uiState.value as? ViewerUiState.Success ?: run {
+            onResult(SaveResult.ValidationFailed("No active document loaded"))
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { (it as? ViewerUiState.Success)?.copy(isSaving = true) ?: it }
+
+            val contentResolver = getApplication<Application>().contentResolver
+            val cacheDir = getApplication<Application>().cacheDir
+            val sink = ContentResolverStorageSink(contentResolver, destinationUri)
+
+            val result = SafeDocumentWriter.safeWrite(
+                sink = sink,
+                cacheDir = cacheDir,
+                writeStagedFile = { _: File, stagedOut: OutputStream ->
+                    val tempPlain = File.createTempFile("plain_vault_", ".tmp", cacheDir)
+                    try {
+                        FileOutputStream(tempPlain).use { out ->
+                            when (val content = current.content) {
+                                is WordDocumentModel -> DocxEngine.save(content, out)
+                                is SpreadsheetDocumentModel -> {
+                                    if (current.format == DocumentFormat.CSV) {
+                                        CsvEngine.save(content, out)
+                                    } else {
+                                        val origStream = activeUri?.let { u ->
+                                            try { contentResolver.openInputStream(u) } catch (_: Exception) { null }
+                                        }
+                                        XlsxEngine.save(content, origStream, out)
+                                    }
+                                }
+                                is TextDocumentModel -> TextEngine.save(content, out)
+                                is PdfDocumentModel -> {
+                                    val origFile = activeUri?.let { u ->
+                                        try { copyStreamToCache(u, "pdf_lock_", ".pdf") } catch (_: Exception) { null }
+                                    }
+                                    if (origFile != null) {
+                                        try {
+                                            PdfManipulator.exportWithAnnotations(
+                                                sourcePdfFile = origFile,
+                                                annotations = content.annotations,
+                                                outputStream = out
+                                            )
+                                        } finally {
+                                            origFile.delete()
+                                        }
+                                    }
+                                }
+                                else -> throw UnsupportedOperationException("Format is not supported for encryption")
+                            }
+                        }
+                        val plainBytes = tempPlain.readBytes()
+                        val encryptedBytes = DocumentCryptoEngine.encrypt(plainBytes, password)
+                        stagedOut.write(encryptedBytes)
+                    } finally {
+                        tempPlain.delete()
+                    }
+                },
+                validateStagedFile = { stagedFile: File ->
+                    DocumentCryptoEngine.isVaultFile(stagedFile)
+                }
+            )
+
+            _uiState.update {
+                if (it is ViewerUiState.Success) {
+                    it.copy(isSaving = false)
+                } else it
+            }
+
+            onResult(result)
+        }
     }
 
     // PDF Annotation

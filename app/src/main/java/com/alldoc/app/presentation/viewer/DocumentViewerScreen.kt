@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Save
@@ -84,11 +85,17 @@ fun DocumentViewerScreen(
     onShareClick: () -> Unit,
     onOpenInAnotherApp: (Uri) -> Unit = {},
     onSaveCopyClick: () -> Unit = {},
+    onSplitPdfClick: (fromPage: Int, toPage: Int) -> Unit = { _, _ -> },
+    onMergePdfClick: () -> Unit = {},
+    onProtectPdfClick: (String) -> Unit = {},
+    onLockDocumentClick: (CharArray) -> Unit = {},
     viewModel: DocumentViewerViewModel
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showUnsavedDialog by remember { mutableStateOf(false) }
+    var showPdfTools by remember { mutableStateOf(false) }
+    var showVaultLockDialog by remember { mutableStateOf(false) }
 
     val successState = uiState as? ViewerUiState.Success
     val isModified = successState?.isModified == true
@@ -213,6 +220,16 @@ fun DocumentViewerScreen(
                             }
                         }
 
+                        if (successState.format == DocumentFormat.PDF) {
+                            IconButton(onClick = { showPdfTools = true }) {
+                                Icon(Icons.Default.Build, contentDescription = "PDF Tools")
+                            }
+                        }
+
+                        IconButton(onClick = { showVaultLockDialog = true }) {
+                            Icon(Icons.Default.Lock, contentDescription = "Encrypt to Vault")
+                        }
+
                         IconButton(onClick = onShareClick) {
                             Icon(Icons.Default.Share, contentDescription = "Share document")
                         }
@@ -264,7 +281,14 @@ fun DocumentViewerScreen(
                 is ViewerUiState.PasswordRequired -> {
                     PasswordPromptScreen(
                         state = uiState,
-                        onUnlock = { password -> viewModel.unlockPdfWithPassword(password) },
+                        onUnlock = { password ->
+                            val docName = uiState.documentName.lowercase()
+                            if (docName.endsWith(".vault") || docName.endsWith(".enc") || docName.contains("vault")) {
+                                viewModel.unlockVaultDocument(password.toCharArray())
+                            } else {
+                                viewModel.unlockPdfWithPassword(password)
+                            }
+                        },
                         onBackClick = onBackClick
                     )
                 }
@@ -431,6 +455,47 @@ fun DocumentViewerScreen(
                 }
             }
         }
+    }
+
+    if (showPdfTools && successState != null) {
+        val pdfModel = successState.content as? PdfDocumentModel
+        com.alldoc.app.presentation.viewer.components.PdfToolsDialog(
+            pageCount = pdfModel?.pageCount ?: 1,
+            onDismiss = { showPdfTools = false },
+            onAction = { action ->
+                showPdfTools = false
+                when (action) {
+                    is com.alldoc.app.presentation.viewer.components.PdfToolAction.Rotate -> {
+                        viewModel.rotatePdf(action.degrees, action.allPages) { success ->
+                            scope.launch {
+                                snackbarHostState.showSnackbar(if (success) "Pages rotated successfully" else "Failed to rotate pages")
+                            }
+                        }
+                    }
+                    is com.alldoc.app.presentation.viewer.components.PdfToolAction.Split -> {
+                        onSplitPdfClick(action.fromPage, action.toPage)
+                    }
+                    is com.alldoc.app.presentation.viewer.components.PdfToolAction.Merge -> {
+                        onMergePdfClick()
+                    }
+                    is com.alldoc.app.presentation.viewer.components.PdfToolAction.Protect -> {
+                        onProtectPdfClick(action.password)
+                    }
+                }
+            }
+        )
+    }
+
+    if (showVaultLockDialog) {
+        com.alldoc.app.presentation.security.VaultPasswordDialog(
+            title = "Encrypt to Vault",
+            isUnlocking = false,
+            onDismiss = { showVaultLockDialog = false },
+            onConfirm = { password ->
+                showVaultLockDialog = false
+                onLockDocumentClick(password)
+            }
+        )
     }
 }
 

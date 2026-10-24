@@ -321,11 +321,13 @@ object XlsxEngine {
                             }
                         }
 
+                        val isFormula = !cellFormula.isNullOrBlank()
                         cells[currentCoord] = CellData(
                             rawValue = finalRawValue,
-                            formula = if (!cellFormula.isNullOrBlank()) "=$cellFormula" else null,
+                            formula = if (isFormula) "=$cellFormula" else null,
+                            cachedFormulaValue = if (isFormula) finalRawValue else null,
                             originalRawValue = finalRawValue,
-                            originalFormula = if (!cellFormula.isNullOrBlank()) "=$cellFormula" else null
+                            originalFormula = if (isFormula) "=$cellFormula" else null
                         )
                         currentCoord = null
                     }
@@ -368,9 +370,9 @@ object XlsxEngine {
             if (hasTime) {
                 val hour = calendar.get(Calendar.HOUR_OF_DAY)
                 val min = calendar.get(Calendar.MINUTE)
-                String.format(Locale.US, "%04d-%02d-%02d %02d:%02d", year, month, day, hour, min)
+                String.format(Locale.ROOT, "%04d-%02d-%02d %02d:%02d", year, month, day, hour, min)
             } else {
-                String.format(Locale.US, "%04d-%02d-%02d", year, month, day)
+                String.format(Locale.ROOT, "%04d-%02d-%02d", year, month, day)
             }
         } catch (_: Exception) {
             serial.toString()
@@ -383,8 +385,14 @@ object XlsxEngine {
         for ((coord, cell) in sheet.cells) {
             val formula = cell.formula
             if (formula != null && formula.startsWith("=")) {
-                val computed = evaluateFormula(formula.removePrefix("="), updatedCells)
-                updatedCells[coord] = cell.copy(computedValue = computed)
+                val bareFormula = formula.removePrefix("=")
+                val computed = evaluateFormula(bareFormula, updatedCells)
+                val finalComputed = if (computed == "#NAME?" || computed == bareFormula) {
+                    cell.cachedFormulaValue ?: cell.rawValue
+                } else {
+                    computed
+                }
+                updatedCells[coord] = cell.copy(computedValue = finalComputed)
             }
         }
 
@@ -402,11 +410,11 @@ object XlsxEngine {
             if (values.isEmpty()) return "0"
 
             return when (func) {
-                "SUM" -> String.format(Locale.US, "%.2f", values.sum()).removeSuffix(".00")
-                "AVERAGE" -> String.format(Locale.US, "%.2f", values.average()).removeSuffix(".00")
+                "SUM" -> String.format(Locale.ROOT, "%.2f", values.sum()).removeSuffix(".00")
+                "AVERAGE" -> String.format(Locale.ROOT, "%.2f", values.average()).removeSuffix(".00")
                 "COUNT" -> values.size.toString()
-                "MAX" -> String.format(Locale.US, "%.2f", values.maxOrNull() ?: 0.0).removeSuffix(".00")
-                "MIN" -> String.format(Locale.US, "%.2f", values.minOrNull() ?: 0.0).removeSuffix(".00")
+                "MAX" -> String.format(Locale.ROOT, "%.2f", values.maxOrNull() ?: 0.0).removeSuffix(".00")
+                "MIN" -> String.format(Locale.ROOT, "%.2f", values.minOrNull() ?: 0.0).removeSuffix(".00")
                 else -> "#NAME?"
             }
         }
@@ -430,7 +438,7 @@ object XlsxEngine {
                 "/" -> if (rightVal != 0.0) leftVal / rightVal else return "#DIV/0!"
                 else -> 0.0
             }
-            return String.format(Locale.US, "%.2f", result).removeSuffix(".00")
+            return String.format(Locale.ROOT, "%.2f", result).removeSuffix(".00")
         }
 
         return expr
