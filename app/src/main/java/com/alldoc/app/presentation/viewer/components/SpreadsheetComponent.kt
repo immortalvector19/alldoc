@@ -19,7 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,6 +43,7 @@ import com.alldoc.app.core.model.SpreadsheetDocumentModel
 fun SpreadsheetComponent(
     model: SpreadsheetDocumentModel,
     onUpdateCell: (row: Int, col: Int, rawValue: String, formula: String?) -> Unit,
+    onSelectSheet: (sheetIndex: Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val activeSheet = model.workbook.activeSheet
@@ -222,6 +225,23 @@ fun SpreadsheetComponent(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Sheet tabs row
+        if (model.workbook.sheets.size > 1) {
+            ScrollableTabRow(
+                selectedTabIndex = model.workbook.activeSheetIndex.coerceIn(0, model.workbook.sheets.size - 1),
+                edgePadding = 8.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                model.workbook.sheets.forEachIndexed { index, sheet ->
+                    Tab(
+                        selected = index == model.workbook.activeSheetIndex,
+                        onClick = { onSelectSheet(index) },
+                        text = { Text(sheet.name, maxLines = 1) }
+                    )
                 }
             }
         }

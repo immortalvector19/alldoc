@@ -47,10 +47,21 @@ data class SpreadsheetWorksheet(
 
     fun updateCell(row: Int, col: Int, cellData: CellData): SpreadsheetWorksheet {
         val newCells = cells.toMutableMap()
-        if (cellData.isEmpty) {
-            newCells.remove(CellCoordinate(row, col))
+        val coord = CellCoordinate(row, col)
+        val existing = cells[coord]
+        val resolvedCell = if (existing != null) {
+            cellData.copy(
+                originalRawValue = existing.originalRawValue,
+                originalFormula = existing.originalFormula
+            )
         } else {
-            newCells[CellCoordinate(row, col)] = cellData
+            cellData
+        }
+
+        if (resolvedCell.isEmpty) {
+            newCells.remove(coord)
+        } else {
+            newCells[coord] = resolvedCell
         }
         val newRowCount = maxOf(rowCount, row + 1)
         val newColCount = maxOf(colCount, col + 1)
@@ -95,13 +106,18 @@ data class CellData(
     val isBold: Boolean = false,
     val isItalic: Boolean = false,
     val textColor: Long? = null,
-    val backgroundColor: Long? = null
+    val backgroundColor: Long? = null,
+    val originalRawValue: String = rawValue,
+    val originalFormula: String? = formula
 ) {
     val displayValue: String
         get() = computedValue ?: rawValue
 
     val isEmpty: Boolean
         get() = rawValue.isEmpty() && formula.isNullOrEmpty()
+
+    val isEdited: Boolean
+        get() = (rawValue != originalRawValue) || (formula != originalFormula)
 
     companion object {
         val EMPTY = CellData()
