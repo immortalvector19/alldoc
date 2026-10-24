@@ -569,6 +569,7 @@ private fun getFormatVisuals(format: DocumentFormat): Pair<Color, String> {
         DocumentFormat.TXT, DocumentFormat.RTF -> Pair(FormatTextColor, "TXT")
         DocumentFormat.MARKDOWN -> Pair(FormatTextColor, "MD")
         DocumentFormat.IMAGE_JPEG, DocumentFormat.IMAGE_PNG, DocumentFormat.IMAGE_WEBP -> Pair(FormatImageColor, "IMG")
+        DocumentFormat.VAULT -> Pair(Color(0xFF673AB7), "VAULT")
         DocumentFormat.UNKNOWN -> Pair(Color.Gray, "FILE")
     }
 }

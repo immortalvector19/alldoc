@@ -81,20 +81,68 @@ class DocumentRepository(
         dao.updateFavorite(uriString, isFavorite)
     }
 
-    suspend fun renameDocument(uriString: String, newName: String) = withContext(Dispatchers.IO) {
-        dao.rename(uriString, newName)
+    suspend fun renameDocument(uriString: String, newName: String): Boolean = withContext(Dispatchers.IO) {
+        val uri = Uri.parse(uriString)
+        var realRenamed = false
+        var finalUriString = uriString
+
+        if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+            try {
+                val newUri = android.provider.DocumentsContract.renameDocument(contentResolver, uri, newName)
+                if (newUri != null) {
+                    finalUriString = newUri.toString()
+                    realRenamed = true
+                }
+            } catch (_: Exception) {
+                // Provider may not support renameDocument
+            }
+        } else if (uri.scheme == ContentResolver.SCHEME_FILE) {
+            val oldFile = uri.path?.let { File(it) }
+            if (oldFile != null && oldFile.exists()) {
+                val newFile = File(oldFile.parentFile, newName)
+                if (oldFile.renameTo(newFile)) {
+                    finalUriString = Uri.fromFile(newFile).toString()
+                    realRenamed = true
+                }
+            }
+        }
+
+        if (finalUriString != uriString) {
+            val existing = dao.getByUri(uriString)
+            if (existing != null) {
+                dao.deleteByUri(uriString)
+                dao.insertOrUpdate(existing.copy(uriString = finalUriString, name = newName, lastModified = System.currentTimeMillis()))
+            }
+        } else {
+            dao.rename(uriString, newName)
+        }
+        realRenamed
     }
 
-    suspend fun deleteDocument(uriString: String) = withContext(Dispatchers.IO) {
+    suspend fun deleteDocument(uriString: String): Boolean = withContext(Dispatchers.IO) {
         dao.deleteByUri(uriString)
+        var deleted = false
         try {
             val uri = Uri.parse(uriString)
-            if (uri.scheme == ContentResolver.SCHEME_FILE) {
-                uri.path?.let { File(it).delete() }
+            if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+                try {
+                    deleted = android.provider.DocumentsContract.deleteDocument(contentResolver, uri)
+                } catch (_: Exception) {
+                    try {
+                        val count = contentResolver.delete(uri, null, null)
+                        deleted = count > 0
+                    } catch (_: Exception) {}
+                }
+            } else if (uri.scheme == ContentResolver.SCHEME_FILE) {
+                val file = uri.path?.let { File(it) }
+                if (file != null && file.exists()) {
+                    deleted = file.delete()
+                }
             }
         } catch (_: Exception) {
-            // Content URIs may be owned by external providers
+            // External file deletion exception
         }
+        deleted
     }
 
     suspend fun saveSnapshotVersion(uriString: String, file: File, note: String? = null): DocumentVersionEntity = withContext(Dispatchers.IO) {
