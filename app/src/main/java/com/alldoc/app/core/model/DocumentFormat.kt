@@ -9,12 +9,12 @@ enum class DocumentFormat(
 ) {
     PDF("pdf", "application/pdf", "PDF Document", DocumentCategory.PDF, true),
     DOCX("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Word Document", DocumentCategory.WORD, true),
-    DOC("doc", "application/msword", "Legacy Word Document", DocumentCategory.WORD, true),
+    DOC("doc", "application/msword", "Legacy Word Document (Read-Only)", DocumentCategory.WORD, false),
     XLSX("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Excel Spreadsheet", DocumentCategory.EXCEL, true),
-    XLS("xls", "application/vnd.ms-excel", "Legacy Excel Spreadsheet", DocumentCategory.EXCEL, true),
+    XLS("xls", "application/vnd.ms-excel", "Legacy Excel Spreadsheet (Read-Only)", DocumentCategory.EXCEL, false),
     CSV("csv", "text/csv", "Comma Separated Values", DocumentCategory.EXCEL, true),
     PPTX("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "PowerPoint Presentation", DocumentCategory.PPT, true),
-    PPT("ppt", "application/vnd.ms-powerpoint", "Legacy PowerPoint", DocumentCategory.PPT, true),
+    PPT("ppt", "application/vnd.ms-powerpoint", "Legacy PowerPoint (Read-Only)", DocumentCategory.PPT, false),
     TXT("txt", "text/plain", "Text Document", DocumentCategory.TEXT, true),
     RTF("rtf", "application/rtf", "Rich Text Document", DocumentCategory.TEXT, true),
     MARKDOWN("md", "text/markdown", "Markdown Document", DocumentCategory.TEXT, true),
@@ -28,7 +28,8 @@ enum class DocumentFormat(
             val normalized = ext?.trim()?.lowercase()?.removePrefix(".") ?: return UNKNOWN
             return entries.firstOrNull { it.extension == normalized } ?: when (normalized) {
                 "jpeg" -> IMAGE_JPEG
-                "m4a", "text" -> TXT
+                "text", "log" -> TXT
+                "markdown" -> MARKDOWN
                 else -> UNKNOWN
             }
         }
@@ -43,12 +44,19 @@ enum class DocumentFormat(
             return entries.firstOrNull { it.mimeType.equals(mime, ignoreCase = true) }
                 ?: when {
                     mime.contains("pdf", ignoreCase = true) -> PDF
-                    mime.contains("wordprocessingml", ignoreCase = true) || mime.contains("msword", ignoreCase = true) -> DOCX
-                    mime.contains("spreadsheetml", ignoreCase = true) || mime.contains("excel", ignoreCase = true) -> XLSX
-                    mime.contains("presentationml", ignoreCase = true) || mime.contains("powerpoint", ignoreCase = true) -> PPTX
+                    mime.contains("wordprocessingml", ignoreCase = true) -> DOCX
+                    mime.contains("msword", ignoreCase = true) -> DOC
+                    mime.contains("spreadsheetml", ignoreCase = true) -> XLSX
+                    mime.contains("ms-excel", ignoreCase = true) || mime.contains("excel", ignoreCase = true) -> XLS
+                    mime.contains("csv", ignoreCase = true) || mime.contains("comma-separated", ignoreCase = true) -> CSV
+                    mime.contains("presentationml", ignoreCase = true) -> PPTX
+                    mime.contains("ms-powerpoint", ignoreCase = true) || mime.contains("powerpoint", ignoreCase = true) -> PPT
+                    mime.contains("image/png", ignoreCase = true) -> IMAGE_PNG
+                    mime.contains("image/webp", ignoreCase = true) -> IMAGE_WEBP
                     mime.startsWith("image/", ignoreCase = true) -> IMAGE_JPEG
-                    mime.contains("text/markdown", ignoreCase = true) -> MARKDOWN
-                    mime.startsWith("text/", ignoreCase = true) -> TXT
+                    mime.contains("markdown", ignoreCase = true) -> MARKDOWN
+                    mime.contains("rtf", ignoreCase = true) -> RTF
+                    mime.startsWith("text/plain", ignoreCase = true) -> TXT
                     else -> UNKNOWN
                 }
         }

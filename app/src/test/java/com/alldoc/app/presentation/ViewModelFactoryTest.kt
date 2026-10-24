@@ -18,6 +18,12 @@ class ViewModelFactoryTest {
         val viewerConstructor = DocumentViewerViewModel::class.java.getConstructor(Application::class.java)
         assertNotNull("DocumentViewerViewModel must have a public (Application) constructor", viewerConstructor)
 
+        val viewerSavedStateConstructor = DocumentViewerViewModel::class.java.getConstructor(
+            Application::class.java,
+            androidx.lifecycle.SavedStateHandle::class.java
+        )
+        assertNotNull("DocumentViewerViewModel must support SavedStateHandle injection", viewerSavedStateConstructor)
+
         val scanConstructor = ScanViewModel::class.java.getConstructor(Application::class.java)
         assertNotNull("ScanViewModel must have a public (Application) constructor", scanConstructor)
     }

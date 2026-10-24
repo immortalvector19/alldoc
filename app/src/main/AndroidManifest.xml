@@ -39,6 +39,7 @@
 
                 <!-- PDF -->
                 <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/x-pdf" />
 
                 <!-- Word -->
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
@@ -48,49 +49,162 @@
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
                 <data android:mimeType="application/vnd.ms-excel" />
                 <data android:mimeType="text/csv" />
+                <data android:mimeType="text/x-csv" />
+                <data android:mimeType="application/csv" />
+                <data android:mimeType="text/comma-separated-values" />
 
                 <!-- PowerPoint -->
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
                 <data android:mimeType="application/vnd.ms-powerpoint" />
 
-                <!-- Text & Markdown -->
+                <!-- Text, RTF & Markdown -->
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="text/markdown" />
+                <data android:mimeType="text/x-markdown" />
                 <data android:mimeType="application/rtf" />
+                <data android:mimeType="text/rtf" />
+                <data android:mimeType="application/x-rtf" />
 
                 <!-- Images -->
-                <data android:mimeType="image/*" />
+                <data android:mimeType="image/jpeg" />
+                <data android:mimeType="image/png" />
+                <data android:mimeType="image/webp" />
             </intent-filter>
 
-            <!-- Extension-based file matching for file managers lacking MIME info -->
+            <!-- Extension-based file matching for file managers (scheme file and content) -->
+            <!-- Matches ONLY document extensions without hijacking random binaries -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.EDIT" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="file" />
                 <data android:scheme="content" />
                 <data android:host="*" />
+
+                <!-- Single-dot extensions (lowercase & uppercase) -->
                 <data android:pathPattern=".*\\.pdf" />
+                <data android:pathPattern=".*\\.PDF" />
                 <data android:pathPattern=".*\\.docx" />
+                <data android:pathPattern=".*\\.DOCX" />
                 <data android:pathPattern=".*\\.doc" />
+                <data android:pathPattern=".*\\.DOC" />
                 <data android:pathPattern=".*\\.xlsx" />
+                <data android:pathPattern=".*\\.XLSX" />
                 <data android:pathPattern=".*\\.xls" />
+                <data android:pathPattern=".*\\.XLS" />
                 <data android:pathPattern=".*\\.csv" />
+                <data android:pathPattern=".*\\.CSV" />
                 <data android:pathPattern=".*\\.pptx" />
+                <data android:pathPattern=".*\\.PPTX" />
                 <data android:pathPattern=".*\\.ppt" />
+                <data android:pathPattern=".*\\.PPT" />
                 <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.TXT" />
                 <data android:pathPattern=".*\\.rtf" />
+                <data android:pathPattern=".*\\.RTF" />
                 <data android:pathPattern=".*\\.md" />
+                <data android:pathPattern=".*\\.MD" />
+
+                <!-- Multi-dot extensions (e.g. report.v2.docx) -->
+                <data android:pathPattern=".*\\..*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\.PDF" />
+                <data android:pathPattern=".*\\..*\\.docx" />
+                <data android:pathPattern=".*\\..*\\.DOCX" />
+                <data android:pathPattern=".*\\..*\\.doc" />
+                <data android:pathPattern=".*\\..*\\.DOC" />
+                <data android:pathPattern=".*\\..*\\.xlsx" />
+                <data android:pathPattern=".*\\..*\\.XLSX" />
+                <data android:pathPattern=".*\\..*\\.xls" />
+                <data android:pathPattern=".*\\..*\\.XLS" />
+                <data android:pathPattern=".*\\..*\\.csv" />
+                <data android:pathPattern=".*\\..*\\.CSV" />
+                <data android:pathPattern=".*\\..*\\.pptx" />
+                <data android:pathPattern=".*\\..*\\.PPTX" />
+                <data android:pathPattern=".*\\..*\\.ppt" />
+                <data android:pathPattern=".*\\..*\\.PPT" />
+                <data android:pathPattern=".*\\..*\\.txt" />
+                <data android:pathPattern=".*\\..*\\.TXT" />
+                <data android:pathPattern=".*\\..*\\.rtf" />
+                <data android:pathPattern=".*\\..*\\.RTF" />
+                <data android:pathPattern=".*\\..*\\.md" />
+                <data android:pathPattern=".*\\..*\\.MD" />
             </intent-filter>
 
-            <!-- Share Target: Receive files sent from other apps (WhatsApp, Gmail, Chrome) -->
+            <!-- Extension-based matching for providers specifying application/octet-stream -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="application/octet-stream" />
+
+                <data android:pathPattern=".*\\.pdf" />
+                <data android:pathPattern=".*\\.PDF" />
+                <data android:pathPattern=".*\\.docx" />
+                <data android:pathPattern=".*\\.DOCX" />
+                <data android:pathPattern=".*\\.doc" />
+                <data android:pathPattern=".*\\.DOC" />
+                <data android:pathPattern=".*\\.xlsx" />
+                <data android:pathPattern=".*\\.XLSX" />
+                <data android:pathPattern=".*\\.xls" />
+                <data android:pathPattern=".*\\.XLS" />
+                <data android:pathPattern=".*\\.csv" />
+                <data android:pathPattern=".*\\.CSV" />
+                <data android:pathPattern=".*\\.pptx" />
+                <data android:pathPattern=".*\\.PPTX" />
+                <data android:pathPattern=".*\\.ppt" />
+                <data android:pathPattern=".*\\.PPT" />
+                <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.TXT" />
+                <data android:pathPattern=".*\\.rtf" />
+                <data android:pathPattern=".*\\.RTF" />
+                <data android:pathPattern=".*\\.md" />
+                <data android:pathPattern=".*\\.MD" />
+            </intent-filter>
+
+            <!-- Share Target: Receive single documents and images sent from other apps -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
+
                 <data android:mimeType="application/pdf" />
-                <data android:mimeType="application/*" />
-                <data android:mimeType="text/*" />
-                <data android:mimeType="image/*" />
+                <data android:mimeType="application/x-pdf" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.*" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/vnd.ms-powerpoint" />
+                <data android:mimeType="application/rtf" />
+                <data android:mimeType="text/rtf" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="image/jpeg" />
+                <data android:mimeType="image/png" />
+                <data android:mimeType="image/webp" />
+            </intent-filter>
+
+            <!-- Share Target: Receive multiple documents/images sent from other apps -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/x-pdf" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.*" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/vnd.ms-powerpoint" />
+                <data android:mimeType="application/rtf" />
+                <data android:mimeType="text/rtf" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="image/jpeg" />
+                <data android:mimeType="image/png" />
+                <data android:mimeType="image/webp" />
             </intent-filter>
         </activity>
 
