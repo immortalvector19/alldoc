@@ -5,16 +5,16 @@
 AllDoc is an offline-first Android application designed to view, edit, scan, and manage every major document format on Android 8.0 (API 26) through Android 15+.
 
 - **Language**: Kotlin 1.9.22+ (100% Kotlin, Coroutines, StateFlow)
-- **UI Framework**: Jetpack Compose (BOM 2024.02.00+) with Material Design 3 (Material You Dynamic Color)
+- **UI Framework**: Jetpack Compose (BOM 2024.04.01) with Material Design 3
 - **Architecture**: Clean Architecture + MVI (Model-View-Intent / Unidirectional Data Flow)
-- **Dependency Injection**: Hilt (Dagger) / Clean Service Locator pattern for modular decoupled testing
-- **Local Persistence**: Room Database 2.6.1 + SQLCipher
+- **Dependency Injection**: Constructor injection & factory patterns for modular decoupled testing
+- **Local Persistence**: Room Database 2.6.1 (SQLite) with scoped storage SAF
 - **Asynchrony**: Kotlin Coroutines (`Dispatchers.IO`, `Dispatchers.Default`, `Dispatchers.Main.immediate`)
 - **Document Engines**:
   - OpenXML Engine (Pure Kotlin, zero-dependency streaming XML & ZIP)
   - Hybrid PDF Engine (Android OS `PdfRenderer` + `PdfBox-Android` + Compose Vector Overlay)
   - Optical Capture & OCR (Google ML Kit Document Scanner API + ML Kit Text Recognition v2 + CameraX fallback)
-  - Security Enclave (AndroidX Security Crypto AES-256-GCM + Android KeyStore)
+  - Document Encryption (PBKDF2-HMAC-SHA256 600,000 iterations + AES-256-GCM authenticated encryption)
   - 100% Offline-First Architecture (Zero remote cloud uploads; sharing via Android System Share Sheet and Storage Access Framework)
 
 ---
@@ -48,7 +48,7 @@ AllDoc is an offline-first Android application designed to view, edit, scan, and
 │  ├── OpenXmlEngine (DOCX, XLSX, PPTX, CSV)                  │
 │  ├── PdfEngine (PdfRenderer, PdfBox-Android, PdfDocument)   │
 │  ├── ScannerEngine (ML Kit Document Scanner + CameraX)      │
-│  └── CryptoEngine (AES-256-GCM + Android KeyStore)          │
+│  └── CryptoEngine (PBKDF2 + AES-256-GCM Vault Encryption)   │
 └─────────────────────────────────────────────────────────────┘
 ```
 

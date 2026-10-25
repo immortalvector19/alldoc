@@ -6,11 +6,17 @@ This document provides the exact commands and steps to execute unit and on-devic
 
 ## 1. Unit Tests (JVM)
 
-Unit tests run locally on your development machine via Robolectric and MockK without requiring a physical device or emulator.
+Unit tests run locally on your development machine via JUnit 4, Kotlinx Coroutines Test, and AndroidX Core Testing (`InstantTaskExecutorRule`) without requiring a physical device or emulator.
 
 ### Run all unit tests:
 ```powershell
 .\gradlew.bat testDebugUnitTest
+```
+
+### Run the real-world format matrix test:
+Covers all supported formats (PDF, password PDF, DOCX with images, DOC, XLS, multi-sheet XLSX, inline strings, PPTX, PPT, CSV, MD, RTF, TXT, images):
+```powershell
+.\gradlew.bat testDebugUnitTest --tests "com.alldoc.app.core.engine.SampleFilesTest"
 ```
 
 ### View test report:
@@ -66,9 +72,9 @@ To run individual test classes:
   .\gradlew.bat connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.alldoc.app.ColdStartIntentTest
   ```
 
-- **Real-World Document Matrix Test** (proves rendering and parsing of PDF, DOCX, XLSX, PPTX, MD, CSV, RTF):
+- **Document Viewer Flow Test** (verifies dirty-exit unsaved changes prompt and read-only save blocking on the UI thread):
   ```powershell
-  .\gradlew.bat connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.alldoc.app.RealWorldDocumentMatrixTest
+  .\gradlew.bat connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.alldoc.app.DocumentViewerFlowInstrumentedTest
   ```
 
 ### Step 6: View the Test Report

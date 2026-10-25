@@ -117,7 +117,8 @@ Run with `.\gradlew.bat testDebugUnitTest`:
 | `XlsxEngineTest` | Multi-sheet XML reading, inline strings, formula fallback, calcChain update | ✅ **PASS** |
 | `CsvEngineTest` | RFC 4180 parsing, quotes, delimiter escaping | ✅ **PASS** |
 | `TextEngineTest` | Charset sniffing, RTF stripping, 0-byte handling | ✅ **PASS** |
-| `FormatSniffingTest` | Magic bytes sniffing (PK zip, OLE2 `D0CF11E0`, `%PDF`, JPEG, PNG, WEBP) | ✅ **PASS** |
+| `FileSnifferTest` | Magic bytes sniffing (PK zip, OLE2 `D0CF11E0`, `%PDF`, JPEG, PNG, WEBP) | ✅ **PASS** |
+| `SampleFilesTest` | Real-world format matrix (PDF, password PDF, DOCX with images, DOC, XLS, multi-sheet XLSX, inline strings, PPTX, PPT, CSV, MD, RTF, TXT, images) | ✅ **PASS** |
 | `Ole2EngineTest` | Legacy `.doc`, `.xls`, `.ppt` bounds-checked extraction | ✅ **PASS** |
 | `SafeDocumentWriterTest` | Staged write, SHA-256 verification, restore on write failure | ✅ **PASS** |
 | `DocumentCryptoEngineTest` | PBKDF2 600k iter, AES-256-GCM encryption, decryption & tampering rejection | ✅ **PASS** |
