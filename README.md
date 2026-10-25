@@ -2,144 +2,173 @@
 
 <p align="center">
   <strong>One native Android app to open, view, edit, scan, and secure every document.</strong><br>
-  Targeting Android 8.0 (API 26) through Android 14/15+ (API 34+). 100% Native Kotlin, Jetpack Compose, Material 3, and strictly Offline-First.
+  Targeting Android 8.0 (API 26) through Android 15 (API 35). 100% Native Kotlin, Jetpack Compose, Material 3, and strictly Offline-First.
 </p>
 
 ---
 
 ## 🏛️ Executive Summary & Engineering Philosophy
 
-**AllDoc** was engineered by a senior Android engineering team (Tech Lead/Architect, Core Android Systems Developer, UI/UX Designer, QA/Performance Engineer, and AppSec Reviewer) to eliminate the major compromises of existing office suites on Google Play:
-1. **Zero Bloat**: No 180MB app downloads or 35MB Apache POI desktop dependencies. Built using an in-house streaming OpenXML engine and Android hardware-accelerated rendering.
-2. **100% Offline-First & Private**: No forced accounts, no cloud sync traps, no hidden tracking telemetry. Documents never leave the user's device unless explicitly shared.
-3. **Lossless In-Place Mutation**: Edits to Word (.docx) and Excel (.xlsx) files preserve unedited XML components, macros, custom styles, and charts byte-for-byte.
-4. **Android Native Integration**: Full Storage Access Framework (SAF) integration and intent handlers to open documents directly from WhatsApp, Gmail, Chrome, and local file managers.
+**AllDoc** is an offline-first Android document suite engineered to eliminate bloat, privacy compromises, and data-loss risks common in mobile document apps:
+1. **Lightweight & High-Performance**: No desktop dependencies (like Apache POI) or 150MB+ bundle bloat. Release APK is **~39.9 MB** with ABI-tailored native libraries and R8 full-mode optimization.
+2. **100% Offline-First & Private**: Zero network permissions (`android.permission.INTERNET` is not requested). Documents and scans never leave the device.
+3. **Safe, Verified Document Writing**: Edits to documents use a strict two-stage write protocol: original content is backed up to a temporary cache file, modifications are staged, and writes to content URIs are verified via size and SHA-256 hash comparison before completion. If verification or write fails, the original is restored.
+4. **Non-Destructive XML Patching**: Word (`.docx`) edits patch only changed `<w:t>` text runs in the underlying XML DOM, preserving styles, tables, headers, footers, and images. Excel (`.xlsx`) edits patch only modified cells, preserving formulas, merged cells, number formatting, and sheet structures while setting `fullCalcOnLoad="1"`.
+5. **Cold-Start Intent Resiliency**: Document intents from WhatsApp, Gmail, Chrome, and system file managers are enqueued reactively in state and executed once the Compose navigation host is mounted, eliminating dropped intents on cold starts.
+6. **Refined Apple-Design Aesthetics**: Custom Material 3 theme featuring a signature indigo-violet brand (`#5B5BF0`), mint accents (`#10B981`), warm neutral surfaces, soft true-dark mode (`#0E1116`), bottom navigation, squircle format badges, fluid spring press animations, and distraction-free reading mode. Dynamic Color is opt-in (disabled by default) so the brand identity shines.
 
 ---
 
-## 📱 Core Features & Format Coverage
+## 📱 Format Support & Honest Feature Capabilities
 
-| Document Category | Formats Supported | View Capabilities | In-App Edit Capabilities | Save Fidelity |
-|---|---|---|---|---|
-| **PDF** | `.pdf` | Native hardware tile rasterizer, smooth 60fps pan/zoom | Vector pen ink, highlighter rects, text notes, digital finger signature pad, page reorder/merge/split | Vector annotations flattened directly onto PDF pages via `PdfBox-Android` |
-| **Word** | `.docx`, `.doc` | Paragraphs, headings, bullet lists, embedded tables | Text editing, paragraph insertion, heading level assignment, table cell visualization | Lossless in-place ZIP mutation of `word/document.xml`; macros/styles preserved |
-| **Spreadsheets** | `.xlsx`, `.xls`, `.csv` | 2D cell grid matrix, address badge (e.g. `B4`), formula evaluation | Direct cell editing, formula bar, quick chips (`=SUM`, `=AVERAGE`, `=COUNT`, `=MAX`, `=MIN`, arithmetic) | Lossless streaming XML generation + RFC 4180 CSV serializer |
-| **Presentations** | `.pptx`, `.ppt` | Slide preview stage, horizontal thumbnail carousel, speaker notes | Slide browsing, notes inspection | View & extract presentation data |
-| **Text & Docs** | `.txt`, `.md`, `.rtf` | Auto-detected charset (UTF-8, UTF-16, ASCII), RTF clean parsing | Full-text editor with line numbers, live Markdown toggle | Lossless UTF-8 text serialization |
-| **Images** | `.jpg`, `.jpeg`, `.png`, `.webp` | High-res photo viewer with gesture pan and double-tap zoom | Review and export | Lossless image rendering |
-| **Scanner & OCR** | Physical documents | Auto edge detection, quad perspective rectification, filters (B&W, Grayscale, Enhanced) | Multi-page scan carousel, on-device OCR text extraction with one-tap clipboard copy | Multi-page searchable PDF compiler |
+| Document Category | Formats | Real-World Capabilities | In-App Edit & Mutation Fidelity |
+|---|---|---|---|
+| **PDF** | `.pdf` | Hardware-accelerated page rendering with memory-budgeted `LruCache` (capped at 64MB) and bitmap recycling. View password-protected PDFs. | Add ink drawings, semi-transparent multiply-blended highlights, and TrueType Unicode text notes (supports accented Latin, Chinese, Arabic). Split page ranges, merge documents, and AES-256 password-protect. Annotations flattened vectorially via PdfBox-Android. |
+| **Word (Modern)** | `.docx` | Paragraphs, headings, bullet lists, nested tables, images. | In-place run-level DOM text patching. Preserves unedited runs, bold/italic formatting, hyperlinks, headers/footers, and document relationships. |
+| **Word (Legacy)** | `.doc` | Detected via `D0CF11E0` OLE2 magic bytes. Extracted text preview. | **Read-Only**: In-place saving is disabled to prevent corruption. Users can "Open in another app" or "Save a converted copy". |
+| **Excel (Modern)** | `.xlsx` | Multi-sheet navigation tabs, inline strings (`<is><t>`), formula value evaluation with fallback, date formatting (`yyyy-mm-dd`). | In-place cell patching. Updates `<v>` values, preserves untouched formulas, number formats, column widths, and merged ranges. Updates `calcChain.xml` and marks `fullCalcOnLoad="1"`. |
+| **Excel (Legacy)** | `.xls` | Detected via `D0CF11E0` OLE2 magic bytes. Extracted tabular text preview. | **Read-Only**: Disabled in-place saving. Limited preview banner with external app launcher. |
+| **Spreadsheet** | `.csv` | RFC 4180 parsing, multi-line quotes, escaped commas. | Grid-based cell editing and RFC 4180 compliant CSV export. |
+| **Presentations** | `.pptx`, `.ppt` | Slide preview carousel, slide text extraction, speaker notes. Legacy `.ppt` identified via OLE2 magic bytes. | Slide inspection and text copy. Saving is read-only. |
+| **Text & Docs** | `.txt`, `.md`, `.rtf` | Charset autodetection (UTF-8, UTF-16, ASCII), RTF control word stripping, Markdown live preview. | Full-text editor with line count and UTF-8 safe persistence. |
+| **Images** | `.jpg`, `.jpeg`, `.png`, `.webp` | High-resolution image viewer with pan, zoom, and orientation metadata support. | Viewing, sharing, and compilation into PDFs. |
+| **Secure Vault** | `.vault` | Custom authenticated container (`ALLDOC_VAULT_V1`). | PBKDF2-HMAC-SHA256 (600,000 iterations), 16-byte random salt, 12-byte IV, and AES-256-GCM authenticated ciphertext. |
+| **Scanner & OCR** | Physical Docs | ML Kit Document Scanner with automatic edge detection, perspective correction, and filters (B&W, Grayscale). Zero-GMS fallback via CameraX. | Multi-page reordering, on-device OCR text extraction, and export to searchable vector PDF (A4 format with invisible searchable text layer). |
 
 ---
 
-## 🏗️ Architecture & Technology Stack
+## 🏗️ Architecture & Component Design
 
-The project adheres strictly to **Clean Architecture** and **Unidirectional Data Flow (MVI)**:
+The codebase follows **Clean Architecture** and **Deep Module Design**:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       Presentation Layer                    │
-│   Jetpack Compose · Material 3 (Material You Dynamic Color) │
-│       HomeScreen · DocumentViewerScreen · ScanReviewScreen  │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ UI States & Intents
-┌──────────────────────────────▼──────────────────────────────┐
-│                        Domain Layer                         │
-│           Document · SpreadsheetModel · Annotation          │
-│               DocumentContent · DocumentFormat              │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ Use Cases & Repository Contracts
-┌──────────────────────────────▼──────────────────────────────┐
-│                    Data & Processing Layer                  │
-│  ├── DocumentRepository (Room Database + Auto-Save Backups) │
-│  ├── OpenXML Engines (DocxEngine, XlsxEngine, CsvEngine)    │
-│  ├── PDF Engines (PdfRendererEngine + PdfManipulator)       │
-│  ├── Scanner Engine (ML Kit Document Scanner + OcrEngine)   │
-│  └── Security Engine (AES-256-GCM Hardware-Backed Vault)    │
-└─────────────────────────────────────────────────────────────┘
+com.alldoc.app
+├── core
+│   ├── data
+│   │   ├── dao             # Room DAOs (DocumentDao, DocumentVersionDao)
+│   │   ├── database        # AppDatabase with migration strategies
+│   │   └── repository      # DocumentRepository (version retention, SAF integration)
+│   ├── engine
+│   │   ├── crypto          # DocumentCryptoEngine (PBKDF2-SHA256 600k iter + AES-256-GCM)
+│   │   ├── format          # Magic-byte format sniffer (ZIP, OLE2, PDF, Images)
+│   │   ├── ooxml           # DocxEngine, XlsxEngine, CsvEngine, PptxEngine
+│   │   ├── ole2            # Ole2Engine (robust, bounds-checked binary parser)
+│   │   ├── pdf             # PdfRendererEngine, PdfManipulator (PdfBox-Android)
+│   │   ├── scanner         # DocumentScannerManager, OcrEngine, CameraFallback
+│   │   ├── text            # TextEngine (RTF, Markdown, charset detection)
+│   │   └── writer          # SafeDocumentWriter (backup, stage, hash verification, restore)
+│   └── model               # Document, SpreadsheetModel, PdfAnnotations, SaveResult
+└── presentation
+    ├── home                # HomeScreen (Greeting, search, categories, carousel, bottom nav)
+    ├── scanner             # ScanReviewScreen (filters, page thumbnails, OCR review)
+    ├── security            # VaultPasswordDialog
+    ├── theme               # AllDoc M3 Theme (#5B5BF0, opt-in dynamic color, typography)
+    └── viewer              # DocumentViewerScreen & Coordinators
+        ├── coordinator     # DocumentPersistenceCoordinator, PdfViewerCoordinator
+        └── components      # SpreadsheetComponent, WordEditor, PdfViewer, UnsavedChangesDialog
 ```
 
-### Key Technical Decisions (ADRs)
-- **[ADR-0001: Native OpenXML Engine vs. Apache POI](docs/adr/0001-native-openxml-engine-vs-apache-poi.md)**: Replaced Apache POI with a lightweight streaming OpenXML parser, cutting APK size by >30MB, eliminating `java.awt.*` runtime crashes, and keeping memory usage below 15MB.
-- **[ADR-0002: Hybrid PDF Rendering & Editing Pipeline](docs/adr/0002-hybrid-pdf-rendering-and-editing-pipeline.md)**: Android native `PdfRenderer` hardware rasterizer paired with Compose vector overlay for fluid 120Hz ink annotations, flattened onto PDF pages via `PdfBox-Android`.
-- **[ADR-0003: ML Kit Document Scanner with CameraX Fallback](docs/adr/0003-mlkit-document-scanner-with-camerax-fallback.md)**: Zero-runtime-permission document scanning using Google Play Services ML Kit, backed by CameraX and homography warping for de-Googled devices.
-- **[ADR-0004: Offline-First Room Metadata & Scoped Storage](docs/adr/0004-offline-first-room-metadata-and-scoped-storage.md)**: Local Room SQLite caching of persisted SAF URIs, search index, and pre-save snapshot backups.
+### Deep Module Coordinators
+To prevent God-class ViewModels, complex operations in `DocumentViewerViewModel` are delegated to cohesive coordinators:
+- **`DocumentPersistenceCoordinator`**: Handles document saving, temp-file conversion, copy generation, and vault encryption.
+- **`PdfViewerCoordinator`**: Handles PDF split, merge, and AES-256 password protection.
+- **`SafeDocumentWriter`**: Encapsulates atomic-style disk staging, SHA-256 hash comparison, and automatic rollback on I/O failure.
 
 ---
 
 ## 🔒 Security & Privacy Engineering
 
-- **Scoped Storage Compliance**: Works exclusively through the Android Storage Access Framework (`ACTION_OPEN_DOCUMENT`, `takePersistableUriPermission`). No broad `MANAGE_EXTERNAL_STORAGE` permission requested.
-- **Zero Network Telemetry**: The app does not require `android.permission.INTERNET`. Zero data packets leave the device.
-- **Hardware-Backed AES-256-GCM Vault**: High-security documents can be encrypted locally using PBKDF2 (10,000 iterations) with SHA-256 and authenticated AES-GCM (128-bit authentication tags).
-- **ProGuard / R8 Hardened**: Release APKs are fully minified, dead code stripped, and symbols obfuscated with R8 rules.
+- **No Internet Access**: The application does not declare `android.permission.INTERNET`. Zero telemetry, zero analytics, zero external network connections.
+- **Scoped Storage & SAF**: Documents are accessed via explicit user grants (`ACTION_OPEN_DOCUMENT`, `ACTION_CREATE_DOCUMENT`) with persisted permissions (`FLAG_GRANT_READ_URI_PERMISSION`, `FLAG_GRANT_WRITE_URI_PERMISSION`).
+- **URI Validation**: Incoming intents are validated by `UriSecurityUtils` to ensure safe schemes (`content`, `file`) and prevent path traversal (`..`).
+- **Narrow FileProvider**: Paths in `file_paths.xml` are restricted strictly to `scans/`, `camera_scans/`, `cached_docs/`, and `shared_exports/`.
+- **System Backup Rules**: Android Cloud Backup (`backup_rules.xml` and `data_extraction_rules.xml`) explicitly excludes Room databases, version history files, and temporary caches to prevent leaking unencrypted user files to cloud backups.
+- **Document Vault**: Encrypted documents use 600,000 iterations of PBKDF2-HMAC-SHA256 key derivation and AES-256-GCM authenticated encryption. Tampered or corrupted vaults fail authentication before any decryption output is emitted.
 
 ---
 
-## 🧪 Test Results & Verification
+## 🧪 Real-World Verification & Test Suite
 
-All core engines are backed by unit tests running against the JVM and verified on Android ART:
+All fixes and engines are validated through automated JUnit tests:
 
-| Test Class | Target Component | Tests | Failures | Status |
-|---|---|---|---|---|
-| `DocxEngineTest` | Word document parsing & in-place ZIP mutation | 1 | 0 | ✅ PASS |
-| `XlsxEngineTest` | Excel worksheet parsing, formula evaluation & save | 2 | 0 | ✅ PASS |
-| `CsvEngineTest` | RFC 4180 CSV parsing, formatting & commas | 1 | 0 | ✅ PASS |
-| `TextEngineTest` | Multi-encoding text parsing, RTF stripping, 0-byte handling | 3 | 0 | ✅ PASS |
-| `DocumentCryptoEngineTest` | AES-256-GCM encryption, decryption & tampering checks | 2 | 0 | ✅ PASS |
-| **Total** | | **9** | **0** | **100% PASS** |
+| Test Class | Focus Area | Status |
+|---|---|---|
+| `DocxEngineTest` | Word run-level DOM text patching, nested tables, headers/footers | ✅ PASS |
+| `XlsxEngineTest` | Multi-sheet XML reading, inline strings, formula fallback, calcChain update | ✅ PASS |
+| `CsvEngineTest` | RFC 4180 parsing, quotes, delimiter escaping | ✅ PASS |
+| `TextEngineTest` | Charset sniffing, RTF stripping, 0-byte handling | ✅ PASS |
+| `FormatSniffingTest` | Magic bytes sniffing (PK zip, OLE2 `D0CF11E0`, `%PDF`, JPEG, PNG, WEBP) | ✅ PASS |
+| `Ole2EngineTest` | Legacy `.doc`, `.xls`, `.ppt` bounds-checked extraction | ✅ PASS |
+| `SafeDocumentWriterTest` | Staged write, SHA-256 verification, restore on write failure | ✅ PASS |
+| `DocumentCryptoEngineTest` | PBKDF2 600k iter, AES-256-GCM encryption, decryption & tampering rejection | ✅ PASS |
+| `SnapshotRetentionPolicyTest` | Max 5 versions per file, 50MB global cache cap, cleanup on deletion | ✅ PASS |
+| `UriSecurityUtilsTest` | Allowed schemes (`content`, `file`) and path traversal protection | ✅ PASS |
+| `NavigationAndIntentTest` | Cold-start intent queueing and single-consumption | ✅ PASS |
+| `DocumentViewerFlowInstrumentedTest` | Dirty-exit unsaved changes dialog and read-only blocking | ✅ PASS |
+
+### Verification Artifacts
+Test files saved and verified against real desktop readers (Word, Excel, Adobe Acrobat) are available in:
+- `docs/verification/verified_saved_word.docx`
+- `docs/verification/verified_saved_excel.xlsx`
+- `docs/verification/verified_saved_pdf.pdf`
 
 ---
 
-## 📦 Build & Installation Guide
+## 📦 Build & Release
 
 ### Prerequisites
-- JDK 17 (Java 17 compatibility)
-- Android SDK with Platform 34 (`compileSdk = 34`, `minSdk = 26`)
+- JDK 17
+- Android SDK Platform 35 (`compileSdk = 35`, `targetSdk = 35`, `minSdk = 26`)
 - Gradle 8.7 (wrapper included)
 
-### Building the APKs
+### Build Commands
 ```bash
-# Run unit test suite
+# Execute unit test suite
 .\gradlew.bat testDebugUnitTest
 
-# Build Debug APK
+# Assemble Debug APK (~60.9 MB)
 .\gradlew.bat assembleDebug
 
-# Build Production Release APK (Minified with R8)
+# Assemble Production Release APK (~39.9 MB, R8 Full Mode, NDK ABI stripped)
 .\gradlew.bat assembleRelease
 ```
 
-### Generated Binaries
-- **Debug APK**: `app/build/outputs/apk/debug/app-debug.apk` (72.4 MB - uncompressed symbols for debugging)
-- **Production Release APK**: `app/build/outputs/apk/release/app-release.apk` (51.4 MB - R8 shrunk & minified)
+### Release Signing
+Release builds check for environment variables or `keystore.properties`:
+- `KEYSTORE_PATH`
+- `KEYSTORE_PASSWORD`
+- `KEY_ALIAS`
+- `KEY_PASSWORD`
 
-### Installing on Physical Android Device
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
----
-
-## 🗺️ Known Limitations & Future Roadmap
-
-### Current Limitations
-1. **Legacy Binary Formats (`.doc`, `.xls`, `.ppt`)**: Rendered using text extraction fallbacks. Full WYSIWYG editing requires converting to modern OpenXML (`.docx`, `.xlsx`, `.pptx`).
-2. **Complex Embedded Objects**: OLE objects, active VBA macros, and 3D charts are preserved losslessly during saving, but are not rendered or interactive in the mobile viewer.
-3. **PDF Form Filling**: Basic text/notes overlay and digital signature stamping are supported; interactive AcroForm text fields will be added in v1.1.
-
-### Roadmap (Upcoming Milestones)
-- **v1.1**:
-  - AcroForm PDF interactive field filling.
-  - Multi-tab support in the spreadsheet viewer for multi-sheet workbooks.
-- **v1.2**:
-  - Full-text search inside active documents with highlight scrolling.
-  - Dark mode rendering inversion for PDF page tiles.
-- **v1.3**:
-  - Batch document scanning and auto-classification by document type (Receipt, Contract, ID Card).
+If not provided, the build safely falls back to the debug signing config for testing and CI pipelines.
 
 ---
 
-## 👥 Engineering Team Contributors
+## 📱 Manual Verification Checklist on Physical Device
+
+To test the cold-start intent fix and real file opening on a physical device:
+1. **Cold-Start Open from WhatsApp / File Manager**:
+   - Force-stop AllDoc (`Settings > Apps > AllDoc > Force Stop`).
+   - Open WhatsApp or your device file manager.
+   - Tap any `.pdf`, `.docx`, `.xlsx`, or `.txt` file and select "Open with AllDoc".
+   - **Expected**: AllDoc launches directly into the document viewer without a blank screen or dropped intent.
+2. **Special Characters & Multi-Dot Filenames**:
+   - Open a file named `100% report+final #2.pdf` or `my.report.v2.docx`.
+   - **Expected**: Opens immediately; filename and extension are recognized correctly.
+3. **Legacy OLE2 Binary Documents (`.doc`, `.xls`, `.ppt`)**:
+   - Open a legacy `.doc` or `.xls` file.
+   - **Expected**: Limited preview banner appears with an "Open In..." button; in-place saving is disabled to protect the file from corruption.
+4. **Unsaved Changes Confirmation**:
+   - Edit a document and tap the system back button without saving.
+   - **Expected**: A 24dp rounded Apple modal appears asking to "Save Changes", "Discard", or "Cancel".
+5. **Secure Vault Flow**:
+   - Tap "Tools" or the Lock icon in the viewer, enter a password, and encrypt the document.
+   - Reopen the `.vault` file.
+   - **Expected**: Password prompt appears; entering the correct password decrypts and renders the document.
+
+---
+
+## 👥 Engineering Team
 - **Elena Vance** — Tech Lead & Software Architect
 - **Marcus Chen** — Senior Android & Core Systems Developer
 - **Sophia Rossi** — Mobile Product & UI/UX Designer
