@@ -76,7 +76,7 @@ The authority hosting the underlying document data:
 - **System Share Dispatch**: Documents shared out of the application via the standard Android system share sheet. AllDoc is strictly 100% offline-first; no remote third-party cloud uploads or external API tracking.
 
 ### Document Vault & Encryption
-A security boundary where document payload bytes are transformed using symmetric authenticated encryption keys derived from user passwords or hardware-isolated security enclaves, preventing unauthorized inspection.
+A security boundary where document payload bytes are transformed using symmetric authenticated encryption keys (AES-256-GCM) derived from user passwords via PBKDF2, preventing unauthorized inspection.
 
 ### Conflict Resolution
 The deterministic handling of concurrent updates when a local document revision diverges from an external or cloud document revision.
