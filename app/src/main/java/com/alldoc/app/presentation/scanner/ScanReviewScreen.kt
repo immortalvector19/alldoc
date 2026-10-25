@@ -91,11 +91,12 @@ fun ScanReviewScreen(
                     } else {
                         Button(
                             onClick = { onSavePdf(docTitle) },
-                            enabled = uiState.pages.isNotEmpty()
+                            enabled = uiState.pages.isNotEmpty(),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Default.PictureAsPdf, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Save PDF")
+                            Text("Save PDF", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -114,6 +115,7 @@ fun ScanReviewScreen(
                 onValueChange = { docTitle = it },
                 label = { Text("Document Title") },
                 singleLine = true,
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -126,7 +128,11 @@ fun ScanReviewScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .aspectRatio(3f / 4f),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(20.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    )
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         AsyncImage(
@@ -150,6 +156,7 @@ fun ScanReviewScreen(
                         FilterChip(
                             selected = isSelected,
                             onClick = { onFilterSelected(uiState.selectedPageIndex, filter) },
+                            shape = RoundedCornerShape(10.dp),
                             label = { Text(filter.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }) }
                         )
                     }
@@ -169,11 +176,11 @@ fun ScanReviewScreen(
                             Box(
                                 modifier = Modifier
                                     .size(60.dp, 80.dp)
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .clip(RoundedCornerShape(10.dp))
                                     .border(
                                         if (isSelected) 2.dp else 0.5.dp,
                                         if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                        RoundedCornerShape(6.dp)
+                                        RoundedCornerShape(10.dp)
                                     )
                                     .clickable { onPageSelected(idx) }
                             ) {
@@ -193,8 +200,12 @@ fun ScanReviewScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    tonalElevation = 2.dp
+                    shape = RoundedCornerShape(18.dp),
+                    tonalElevation = 2.dp,
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(

@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Save
@@ -33,6 +36,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -96,6 +101,7 @@ fun DocumentViewerScreen(
     var showUnsavedDialog by remember { mutableStateOf(false) }
     var showPdfTools by remember { mutableStateOf(false) }
     var showVaultLockDialog by remember { mutableStateOf(false) }
+    var isReadingMode by remember { mutableStateOf(false) }
 
     val successState = uiState as? ViewerUiState.Success
     val isModified = successState?.isModified == true
@@ -107,162 +113,145 @@ fun DocumentViewerScreen(
 
     // Unsaved Changes Confirmation Dialog
     if (showUnsavedDialog) {
-        AlertDialog(
-            onDismissRequest = { showUnsavedDialog = false },
-            title = { Text("Unsaved Changes") },
-            text = { Text("You have unsaved edits in this document. Would you like to save before leaving?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showUnsavedDialog = false
-                        viewModel.saveDocument { success ->
-                            if (success) {
-                                onBackClick()
-                            } else {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Failed to save document")
-                                }
-                            }
-                        }
-                    }
-                ) {
-                    Text("Save & Exit")
-                }
+        com.alldoc.app.presentation.viewer.components.UnsavedChangesDialog(
+            onDismiss = { showUnsavedDialog = false },
+            onDiscard = {
+                showUnsavedDialog = false
+                onBackClick()
             },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = { showUnsavedDialog = false }) {
-                        Text("Cancel")
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    OutlinedButton(
-                        onClick = {
-                            showUnsavedDialog = false
-                            onBackClick()
-                        }
-                    ) {
-                        Text("Discard")
-                    }
-                }
+            onSave = {
+                showUnsavedDialog = false
+                onSaveClick()
+                onBackClick()
             }
         )
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    val title = successState?.documentName
-                        ?: (uiState as? ViewerUiState.PasswordRequired)?.documentName
-                        ?: (uiState as? ViewerUiState.UnsupportedFormat)?.documentName
-                        ?: "Document"
+            if (!isReadingMode) {
+                TopAppBar(
+                    title = {
+                        val title = successState?.documentName
+                            ?: (uiState as? ViewerUiState.PasswordRequired)?.documentName
+                            ?: (uiState as? ViewerUiState.UnsupportedFormat)?.documentName
+                            ?: "Document"
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = title,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                        if (successState != null && !successState.format.isEditable) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "Read-Only",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        } else if (isModified) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(MaterialTheme.colorScheme.tertiaryContainer)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "Edited",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                            }
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            if (isModified) {
-                                showUnsavedDialog = true
-                            } else {
-                                onBackClick()
-                            }
-                        }
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (successState != null) {
-                        // Open with another app action
-                        val origUri = successState.originalUri ?: viewModel.activeUri
-                        if (origUri != null) {
-                            IconButton(onClick = { onOpenInAnotherApp(origUri) }) {
-                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open in another app")
-                            }
-                        }
-
-                        if (successState.format == DocumentFormat.PDF) {
-                            IconButton(onClick = { showPdfTools = true }) {
-                                Icon(Icons.Default.Build, contentDescription = "PDF Tools")
-                            }
-                        }
-
-                        IconButton(onClick = { showVaultLockDialog = true }) {
-                            Icon(Icons.Default.Lock, contentDescription = "Encrypt to Vault")
-                        }
-
-                        IconButton(onClick = onShareClick) {
-                            Icon(Icons.Default.Share, contentDescription = "Share document")
-                        }
-
-                        if (successState.isCachedCopy) {
-                            OutlinedButton(
-                                onClick = onSaveCopyClick,
-                                modifier = Modifier.padding(horizontal = 4.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text("Save Copy", fontSize = 12.sp)
-                            }
-                        } else if (successState.format.isEditable) {
-                            if (successState.isSaving) {
-                                CircularProgressIndicator(
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = title,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (successState != null && !successState.format.isEditable) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
                                     modifier = Modifier
-                                        .padding(horizontal = 12.dp)
-                                        .size(24.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                IconButton(onClick = onSaveClick) {
-                                    Icon(
-                                        Icons.Default.Save,
-                                        contentDescription = "Save document",
-                                        tint = if (successState.isModified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = "Read-Only",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else if (isModified) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = "Edited",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 }
                             }
                         }
+                    },
+                    navigationIcon = {
+                        IconButton(
+                            onClick = {
+                                if (isModified) {
+                                    showUnsavedDialog = true
+                                } else {
+                                    onBackClick()
+                                }
+                            }
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        if (successState != null) {
+                            // Toggle distraction-free reading mode
+                            IconButton(onClick = { isReadingMode = true }) {
+                                Icon(Icons.Default.Fullscreen, contentDescription = "Reading mode")
+                            }
+
+                            // Open with another app action
+                            val origUri = successState.originalUri ?: viewModel.activeUri
+                            if (origUri != null) {
+                                IconButton(onClick = { onOpenInAnotherApp(origUri) }) {
+                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open in another app")
+                                }
+                            }
+
+                            if (successState.format == DocumentFormat.PDF) {
+                                IconButton(onClick = { showPdfTools = true }) {
+                                    Icon(Icons.Default.Build, contentDescription = "PDF Tools")
+                                }
+                            }
+
+                            IconButton(onClick = { showVaultLockDialog = true }) {
+                                Icon(Icons.Default.Lock, contentDescription = "Encrypt to Vault")
+                            }
+
+                            IconButton(onClick = onShareClick) {
+                                Icon(Icons.Default.Share, contentDescription = "Share document")
+                            }
+
+                            if (successState.isCachedCopy) {
+                                OutlinedButton(
+                                    onClick = onSaveCopyClick,
+                                    modifier = Modifier.padding(horizontal = 4.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Save Copy", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            } else if (successState.format.isEditable) {
+                                if (successState.isSaving) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .padding(horizontal = 12.dp)
+                                            .size(24.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    IconButton(onClick = onSaveClick) {
+                                        Icon(
+                                            Icons.Default.Save,
+                                            contentDescription = "Save document",
+                                            tint = if (successState.isModified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
-                }
-            )
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
@@ -342,38 +331,56 @@ fun DocumentViewerScreen(
                         if (uiState.format in listOf(DocumentFormat.DOC, DocumentFormat.XLS, DocumentFormat.PPT)) {
                             Card(
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                                 ),
-                                shape = RoundedCornerShape(0.dp),
-                                modifier = Modifier.fillMaxWidth()
+                                shape = RoundedCornerShape(16.dp),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(MaterialTheme.colorScheme.primaryContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Legacy Format (Limited Preview)",
+                                            text = "Legacy OLE2 Format (Limited Preview)",
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = "Text content extracted. Formulas, styles, and embedded images are not displayed.",
+                                            text = "Extracted read-only text. Formatting, formulas, and charts are not rendered.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     val origUri = uiState.originalUri ?: viewModel.activeUri
                                     if (origUri != null) {
-                                        TextButton(onClick = { onOpenInAnotherApp(origUri) }) {
-                                            Text("Open In...", fontSize = 12.sp)
+                                        FilledTonalButton(
+                                            onClick = { onOpenInAnotherApp(origUri) },
+                                            shape = RoundedCornerShape(10.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Text("Open In...", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                         }
                                     }
                                 }
@@ -381,30 +388,48 @@ fun DocumentViewerScreen(
                         } else if (uiState.isCachedCopy) {
                             Card(
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
                                 ),
-                                shape = RoundedCornerShape(0.dp),
-                                modifier = Modifier.fillMaxWidth()
+                                shape = RoundedCornerShape(16.dp),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = "Temporary file copy. Changes cannot overwrite original.",
+                                        text = "Cached temporary copy. Direct overwrite is disabled to protect original.",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    TextButton(onClick = onSaveCopyClick) {
-                                        Text("Save Copy", fontSize = 12.sp)
+                                    Button(
+                                        onClick = onSaveCopyClick,
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Text("Save Copy", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
@@ -452,6 +477,25 @@ fun DocumentViewerScreen(
                             }
                         }
                     }
+                }
+            }
+
+            if (isReadingMode) {
+                FloatingActionButton(
+                    onClick = { isReadingMode = false },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(20.dp)
+                        .size(48.dp),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FullscreenExit,
+                        contentDescription = "Exit reading mode",
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
         }

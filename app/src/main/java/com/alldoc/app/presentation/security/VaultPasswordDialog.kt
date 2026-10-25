@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
@@ -22,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -39,8 +41,9 @@ fun VaultPasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
         title = {
-            Text(title)
+            Text(title, fontWeight = FontWeight.Bold)
         },
         text = {
             Column {
@@ -61,6 +64,7 @@ fun VaultPasswordDialog(
                         errorMessage = null
                     },
                     label = { Text("Password") },
+                    shape = RoundedCornerShape(14.dp),
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -86,13 +90,14 @@ fun VaultPasswordDialog(
                     } else {
                         onConfirm(password.toCharArray())
                     }
-                }
+                },
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text(if (isUnlocking) "Unlock" else "Encrypt")
+                Text(if (isUnlocking) "Unlock" else "Encrypt", fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) {
                 Text("Cancel")
             }
         }

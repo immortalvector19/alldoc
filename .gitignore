@@ -63,3 +63,4 @@ Thumbs.db
 
 # Temporary on-device verification artifacts
 alldoc_*.png
+app/docs/

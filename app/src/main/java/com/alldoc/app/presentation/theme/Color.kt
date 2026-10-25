@@ -2,46 +2,52 @@ package com.alldoc.app.presentation.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Primary Indigo / Deep Navy palette
-val PrimaryLight = Color(0xFF1E3A8A)
+// Brand Indigo-Violet Palette (Premium Modern Identity)
+val PrimaryLight = Color(0xFF5B5BF0)
 val OnPrimaryLight = Color(0xFFFFFFFF)
-val PrimaryContainerLight = Color(0xFFDBEAFE)
-val OnPrimaryContainerLight = Color(0xFF1E3A8A)
+val PrimaryContainerLight = Color(0xFFEEF0FD)
+val OnPrimaryContainerLight = Color(0xFF2325A8)
 
-val SecondaryLight = Color(0xFF0F766E)
+// Mint / Teal Accent
+val SecondaryLight = Color(0xFF10B981)
 val OnSecondaryLight = Color(0xFFFFFFFF)
-val SecondaryContainerLight = Color(0xFFCCFBF1)
-val OnSecondaryContainerLight = Color(0xFF115E59)
+val SecondaryContainerLight = Color(0xFFD1FAE5)
+val OnSecondaryContainerLight = Color(0xFF065F46)
 
-val BackgroundLight = Color(0xFFF8FAFC)
-val OnBackgroundLight = Color(0xFF0F172A)
+// Warm-Neutral Surfaces (Light)
+val BackgroundLight = Color(0xFFF9FAFB)
+val OnBackgroundLight = Color(0xFF111827)
 val SurfaceLight = Color(0xFFFFFFFF)
-val OnSurfaceLight = Color(0xFF0F172A)
-val SurfaceVariantLight = Color(0xFFF1F5F9)
-val OnSurfaceVariantLight = Color(0xFF475569)
+val OnSurfaceLight = Color(0xFF111827)
+val SurfaceVariantLight = Color(0xFFF3F4F6)
+val OnSurfaceVariantLight = Color(0xFF4B5563)
+val OutlineLight = Color(0xFFE5E7EB)
+val OutlineVariantLight = Color(0xFFF3F4F6)
 
-// Dark Theme Palette
-val PrimaryDark = Color(0xFF93C5FD)
-val OnPrimaryDark = Color(0xFF172554)
-val PrimaryContainerDark = Color(0xFF1E40AF)
-val OnPrimaryContainerDark = Color(0xFFDBEAFE)
+// Soft True-Dark Theme (around #0E1116 background, never pure black)
+val PrimaryDark = Color(0xFF7E7EFC)
+val OnPrimaryDark = Color(0xFF0E1116)
+val PrimaryContainerDark = Color(0xFF3838C7)
+val OnPrimaryContainerDark = Color(0xFFEEF0FD)
 
-val SecondaryDark = Color(0xFF5EEAD4)
-val OnSecondaryDark = Color(0xFF134E4A)
-val SecondaryContainerDark = Color(0xFF115E59)
-val OnSecondaryContainerDark = Color(0xFFCCFBF1)
+val SecondaryDark = Color(0xFF34D399)
+val OnSecondaryDark = Color(0xFF0E1116)
+val SecondaryContainerDark = Color(0xFF065F46)
+val OnSecondaryContainerDark = Color(0xFFD1FAE5)
 
-val BackgroundDark = Color(0xFF0B0F19)
-val OnBackgroundDark = Color(0xFFF8FAFC)
-val SurfaceDark = Color(0xFF111827)
-val OnSurfaceDark = Color(0xFFF8FAFC)
-val SurfaceVariantDark = Color(0xFF1F2937)
-val OnSurfaceVariantDark = Color(0xFF94A3B8)
+val BackgroundDark = Color(0xFF0E1116)
+val OnBackgroundDark = Color(0xFFF3F4F6)
+val SurfaceDark = Color(0xFF161B22)
+val OnSurfaceDark = Color(0xFFF3F4F6)
+val SurfaceVariantDark = Color(0xFF21262D)
+val OnSurfaceVariantDark = Color(0xFF9CA3AF)
+val OutlineDark = Color(0xFF30363D)
+val OutlineVariantDark = Color(0xFF21262D)
 
 // Document Format Accent Colors
-val FormatPdfColor = Color(0xFFDC2626) // Red
+val FormatPdfColor = Color(0xFFEF4444) // Red
 val FormatWordColor = Color(0xFF2563EB) // Blue
-val FormatExcelColor = Color(0xFF16A34A) // Green
-val FormatPptColor = Color(0xFFEA580C) // Orange
+val FormatExcelColor = Color(0xFF10B981) // Mint Green
+val FormatPptColor = Color(0xFFF97316) // Orange
 val FormatTextColor = Color(0xFF64748B) // Slate
-val FormatImageColor = Color(0xFF9333EA) // Purple
+val FormatImageColor = Color(0xFF8B5CF6) // Purple
