@@ -13,10 +13,13 @@
 # Keep PDFBox Android
 -keep class com.tom_roush.pdfbox.** { *; }
 -dontwarn com.tom_roush.pdfbox.**
+-keep class com.tomroush.** { *; }
+-dontwarn com.tomroush.**
 
 # Keep Kotlinx Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory { *; }
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler { *; }
 
-# Keep Domain & State models for JSON or serialization
--keepclassmembers class com.alldoc.app.core.model.** { *; }
+# Keep Domain & State models for Room, JSON and serialization
+-keep class com.alldoc.app.data.local.entity.** { *; }
+-keep class com.alldoc.app.core.model.** { *; }
