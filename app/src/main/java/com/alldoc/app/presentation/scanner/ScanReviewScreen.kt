@@ -87,16 +87,17 @@ fun ScanReviewScreen(
                 },
                 actions = {
                     if (uiState.isCompilingPdf) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
                         Button(
                             onClick = { onSavePdf(docTitle) },
                             enabled = uiState.pages.isNotEmpty(),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Icon(Icons.Default.PictureAsPdf, contentDescription = null)
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Save PDF", fontWeight = FontWeight.SemiBold)
+                            Text("Save PDF", style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
@@ -115,7 +116,7 @@ fun ScanReviewScreen(
                 onValueChange = { docTitle = it },
                 label = { Text("Document Title") },
                 singleLine = true,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -128,10 +129,10 @@ fun ScanReviewScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .aspectRatio(3f / 4f),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(12.dp),
                     border = androidx.compose.foundation.BorderStroke(
                         width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        color = MaterialTheme.colorScheme.outline
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {

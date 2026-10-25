@@ -24,29 +24,28 @@ fun UnsavedChangesDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(12.dp),
         title = {
             Text(
                 text = "Unsaved Changes",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.5).sp
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
             )
         },
         text = {
             Text(
-                text = "You have modified this document. Do you want to save your changes before exiting?",
+                text = "Save changes before exiting?",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 20.sp
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
         confirmButton = {
             Button(
                 onClick = onSave,
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Save Changes", fontWeight = FontWeight.SemiBold)
+                Text("Save", style = MaterialTheme.typography.labelMedium)
             }
         },
         dismissButton = {
@@ -56,16 +55,16 @@ fun UnsavedChangesDialog(
             ) {
                 TextButton(
                     onClick = onDismiss,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Cancel", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 TextButton(
                     onClick = onDiscard,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Discard", fontWeight = FontWeight.SemiBold)
+                    Text("Discard", style = MaterialTheme.typography.labelMedium)
                 }
             }
         }

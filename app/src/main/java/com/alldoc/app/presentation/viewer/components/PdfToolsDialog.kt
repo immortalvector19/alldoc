@@ -62,9 +62,9 @@ fun PdfToolsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(12.dp),
         title = {
-            Text("PDF Tools", fontWeight = FontWeight.Bold)
+            Text("PDF Tools", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {

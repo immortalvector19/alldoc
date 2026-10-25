@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
@@ -35,6 +36,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
@@ -50,6 +53,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -101,7 +105,8 @@ fun DocumentViewerScreen(
     var showUnsavedDialog by remember { mutableStateOf(false) }
     var showPdfTools by remember { mutableStateOf(false) }
     var showVaultLockDialog by remember { mutableStateOf(false) }
-    var isReadingMode by remember { mutableStateOf(false) }
+    var isReadingMode by remember { mutableStateOf(true) } // Reading mode is default!
+    var menuExpanded by remember { mutableStateOf(false) }
 
     val successState = uiState as? ViewerUiState.Success
     val isModified = successState?.isModified == true
@@ -137,47 +142,14 @@ fun DocumentViewerScreen(
                             ?: (uiState as? ViewerUiState.UnsupportedFormat)?.documentName
                             ?: "Document"
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = title,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                            if (successState != null && !successState.format.isEditable) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                                ) {
-                                    Text(
-                                        text = "Read-Only",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            } else if (isModified) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.primaryContainer)
-                                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                                ) {
-                                    Text(
-                                        text = "Edited",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
-                        }
+                        Text(
+                            text = title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     },
                     navigationIcon = {
                         IconButton(
@@ -189,68 +161,162 @@ fun DocumentViewerScreen(
                                 }
                             }
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     },
                     actions = {
                         if (successState != null) {
-                            // Toggle distraction-free reading mode
-                            IconButton(onClick = { isReadingMode = true }) {
-                                Icon(Icons.Default.Fullscreen, contentDescription = "Reading mode")
-                            }
-
-                            // Open with another app action
-                            val origUri = successState.originalUri ?: viewModel.activeUri
-                            if (origUri != null) {
-                                IconButton(onClick = { onOpenInAnotherApp(origUri) }) {
-                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open in another app")
-                                }
-                            }
-
-                            if (successState.format == DocumentFormat.PDF) {
-                                IconButton(onClick = { showPdfTools = true }) {
-                                    Icon(Icons.Default.Build, contentDescription = "PDF Tools")
-                                }
-                            }
-
-                            IconButton(onClick = { showVaultLockDialog = true }) {
-                                Icon(Icons.Default.Lock, contentDescription = "Encrypt to Vault")
-                            }
-
-                            IconButton(onClick = onShareClick) {
-                                Icon(Icons.Default.Share, contentDescription = "Share document")
-                            }
-
-                            if (successState.isCachedCopy) {
-                                OutlinedButton(
-                                    onClick = onSaveCopyClick,
-                                    modifier = Modifier.padding(horizontal = 4.dp),
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text("Save Copy", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                }
-                            } else if (successState.format.isEditable) {
-                                if (successState.isSaving) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier
-                                            .padding(horizontal = 12.dp)
-                                            .size(24.dp),
-                                        strokeWidth = 2.dp
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(
+                                        Icons.Default.MoreVert,
+                                        contentDescription = "Options",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                } else {
-                                    IconButton(onClick = onSaveClick) {
-                                        Icon(
-                                            Icons.Default.Save,
-                                            contentDescription = "Save document",
-                                            tint = if (successState.isModified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+
+                                DropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismissRequest = { menuExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Share", style = MaterialTheme.typography.bodyMedium) },
+                                        onClick = {
+                                            menuExpanded = false
+                                            onShareClick()
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Save Copy…", style = MaterialTheme.typography.bodyMedium) },
+                                        onClick = {
+                                            menuExpanded = false
+                                            onSaveCopyClick()
+                                        }
+                                    )
+                                    val origUri = successState.originalUri ?: viewModel.activeUri
+                                    if (origUri != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("Open in another app", style = MaterialTheme.typography.bodyMedium) },
+                                            onClick = {
+                                                menuExpanded = false
+                                                onOpenInAnotherApp(origUri)
+                                            }
+                                        )
+                                    }
+                                    if (successState.format == DocumentFormat.PDF) {
+                                        DropdownMenuItem(
+                                            text = { Text("PDF Tools", style = MaterialTheme.typography.bodyMedium) },
+                                            onClick = {
+                                                menuExpanded = false
+                                                showPdfTools = true
+                                            }
+                                        )
+                                    }
+                                    DropdownMenuItem(
+                                        text = { Text("Encrypt to Vault", style = MaterialTheme.typography.bodyMedium) },
+                                        onClick = {
+                                            menuExpanded = false
+                                            showVaultLockDialog = true
+                                        }
+                                    )
+                                    if (successState.format.isEditable && successState.isModified) {
+                                        DropdownMenuItem(
+                                            text = { Text("Save Document", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) },
+                                            onClick = {
+                                                menuExpanded = false
+                                                onSaveClick()
+                                            }
                                         )
                                     }
                                 }
                             }
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
+            }
+        },
+        bottomBar = {
+            if (!isReadingMode && successState != null) {
+                // Slim bottom toolbar with single-color icons
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { isReadingMode = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Fullscreen,
+                                contentDescription = "Reading mode",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        if (successState.format == DocumentFormat.PDF) {
+                            IconButton(onClick = { showPdfTools = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Build,
+                                    contentDescription = "PDF Tools",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        IconButton(onClick = { showVaultLockDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Lock",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        IconButton(onClick = onShareClick) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        if (successState.format.isEditable) {
+                            if (successState.isSaving) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                IconButton(onClick = onSaveClick) {
+                                    Icon(
+                                        imageVector = Icons.Default.Save,
+                                        contentDescription = "Save",
+                                        tint = if (successState.isModified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -329,107 +395,66 @@ fun DocumentViewerScreen(
                     Column(modifier = Modifier.fillMaxSize()) {
                         // Banner for legacy OLE2 formats
                         if (uiState.format in listOf(DocumentFormat.DOC, DocumentFormat.XLS, DocumentFormat.PPT)) {
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                ),
-                                shape = RoundedCornerShape(16.dp),
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp),
                                 border = androidx.compose.foundation.BorderStroke(
                                     width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                    color = MaterialTheme.colorScheme.outline
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 6.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(MaterialTheme.colorScheme.primaryContainer),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Info,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Legacy OLE2 Format (Limited Preview)",
+                                            text = "Legacy binary format",
                                             style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            text = "Extracted read-only text. Formatting, formulas, and charts are not rendered.",
+                                            text = "Extracted read-only text. Macros and charts are not rendered.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     val origUri = uiState.originalUri ?: viewModel.activeUri
                                     if (origUri != null) {
-                                        FilledTonalButton(
-                                            onClick = { onOpenInAnotherApp(origUri) },
-                                            shape = RoundedCornerShape(10.dp),
-                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                        ) {
-                                            Text("Open In...", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        TextButton(onClick = { onOpenInAnotherApp(origUri) }) {
+                                            Text("Open In…", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                                         }
                                     }
                                 }
                             }
                         } else if (uiState.isCachedCopy) {
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                                ),
-                                shape = RoundedCornerShape(16.dp),
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp),
                                 border = androidx.compose.foundation.BorderStroke(
                                     width = 1.dp,
-                                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f)
+                                    color = MaterialTheme.colorScheme.outline
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 6.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Info,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.secondary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = "Cached temporary copy. Direct overwrite is disabled to protect original.",
+                                        text = "Temporary cached copy. Direct overwrite is disabled.",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    Button(
-                                        onClick = onSaveCopyClick,
-                                        shape = RoundedCornerShape(10.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Text("Save Copy", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    TextButton(onClick = onSaveCopyClick) {
+                                        Text("Save Copy", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                                     }
                                 }
                             }
@@ -481,21 +506,32 @@ fun DocumentViewerScreen(
             }
 
             if (isReadingMode) {
-                FloatingActionButton(
+                Surface(
                     onClick = { isReadingMode = false },
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(20.dp)
-                        .size(48.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        .padding(16.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.FullscreenExit,
-                        contentDescription = "Exit reading mode",
-                        modifier = Modifier.size(24.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FullscreenExit,
+                            contentDescription = "Show toolbar",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Tools",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
