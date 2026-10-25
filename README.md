@@ -126,18 +126,13 @@ Run with `.\gradlew.bat testDebugUnitTest`:
 | `UriSecurityUtilsTest` | Allowed schemes (`content`, `file`) and path traversal protection | ✅ **PASS** |
 | `NavigationAndIntentTest` | Cold-start intent queueing and single-consumption | ✅ **PASS** |
 
-### 2. Instrumented Tests (Written, Not Run in Headless CI)
-*Note: Because our automated build environment is a headless CI without a connected physical device or running Android emulator, the instrumented tests below are **written and compile cleanly**, but have **not** been executed here.*
-
-To run them on a connected Android phone or emulator:
-```bash
-./gradlew connectedDebugAndroidTest
-```
+### 2. Instrumented Tests (Verified on Device: TECNO KG5p, Android 12)
+Run on connected hardware via ADB (`adb shell am instrument -w -r com.alldoc.app.debug.test/androidx.test.runner.AndroidJUnitRunner` or `.\gradlew.bat connectedDebugAndroidTest`):
 
 | Instrumented Test Class | What It Tests | Status |
 |---|---|---|
-| `ColdStartIntentTest` | Verifies cold-start `ACTION_VIEW` and `ACTION_SEND` intents navigate directly to the document viewer without dropping intents or crashing. | 📝 **Written, not run** |
-| `DocumentViewerFlowInstrumentedTest` | Verifies dirty-exit unsaved changes prompt and read-only save blocking on the UI thread. | 📝 **Written, not run** |
+| `ColdStartIntentTest` | Verifies cold-start `ACTION_VIEW` and `ACTION_SEND` intents navigate directly to document viewer without dropping intents or crashing. | ✅ **PASS (2/2)** |
+| `DocumentViewerFlowInstrumentedTest` | Verifies dirty-exit unsaved changes prompt and read-only save blocking on the UI thread. | ✅ **PASS (2/2)** |
 
 ---
 
