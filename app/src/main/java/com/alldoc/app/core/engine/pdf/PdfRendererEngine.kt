@@ -23,10 +23,22 @@ class PdfRendererEngine(
     val pageCount: Int
         get() = renderer.pageCount
 
-    // LRU Cache: Max 32MB or 8 rendered pages in memory
-    private val bitmapCache = object : LruCache<Int, Bitmap>(8) {
+    // LRU Cache sized by memory in KB: 25% of max heap, capped at 64 MB (min 16 MB)
+    val maxCacheSizeKb: Int = run {
+        val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024).toInt()
+        val quarterMemoryKb = maxMemoryKb / 4
+        quarterMemoryKb.coerceIn(16 * 1024, 64 * 1024)
+    }
+
+    val bitmapCache = object : LruCache<Int, Bitmap>(maxCacheSizeKb) {
+        override fun sizeOf(key: Int, value: Bitmap): Int {
+            return (value.allocationByteCount / 1024).coerceAtLeast(1)
+        }
+
         override fun entryRemoved(evicted: Boolean, key: Int?, oldValue: Bitmap?, newValue: Bitmap?) {
-            // Note: Let GC reclaim bitmap memory safely
+            if (oldValue != null && oldValue != newValue && !oldValue.isRecycled) {
+                oldValue.recycle()
+            }
         }
     }
 

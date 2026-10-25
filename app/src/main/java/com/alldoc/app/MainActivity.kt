@@ -331,12 +331,20 @@ class MainActivity : ComponentActivity() {
         val data = intent.data
 
         if ((Intent.ACTION_VIEW == action || Intent.ACTION_EDIT == action) && data != null) {
+            if (!com.alldoc.app.core.util.UriSecurityUtils.isSafeIncomingUri(data)) {
+                Toast.makeText(this, "Rejected untrusted or unsafe file URI", Toast.LENGTH_SHORT).show()
+                return
+            }
             val persistable = takePersistablePermission(data)
             val uriToUse = if (!persistable) cacheIncomingUri(data) else data
             pendingDocumentUri.value = uriToUse
         } else if (Intent.ACTION_SEND == action) {
             val streamUri = androidx.core.content.IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             if (streamUri != null) {
+                if (!com.alldoc.app.core.util.UriSecurityUtils.isSafeIncomingUri(streamUri)) {
+                    Toast.makeText(this, "Rejected untrusted or unsafe shared file URI", Toast.LENGTH_SHORT).show()
+                    return
+                }
                 val persistable = takePersistablePermission(streamUri)
                 val uriToUse = if (!persistable) cacheIncomingUri(streamUri) else streamUri
                 pendingDocumentUri.value = uriToUse
@@ -345,6 +353,10 @@ class MainActivity : ComponentActivity() {
             val streamUris = androidx.core.content.IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             val firstUri = streamUris?.firstOrNull()
             if (firstUri != null) {
+                if (!com.alldoc.app.core.util.UriSecurityUtils.isSafeIncomingUri(firstUri)) {
+                    Toast.makeText(this, "Rejected untrusted or unsafe shared file URI", Toast.LENGTH_SHORT).show()
+                    return
+                }
                 val persistable = takePersistablePermission(firstUri)
                 val uriToUse = if (!persistable) cacheIncomingUri(firstUri) else firstUri
                 pendingDocumentUri.value = uriToUse
@@ -354,9 +366,17 @@ class MainActivity : ComponentActivity() {
 
     private fun cacheIncomingUri(uri: Uri): Uri {
         return try {
-            val cachedDocsDir = File(filesDir, "cached_docs").apply { mkdirs() }
-            val fileName = queryDisplayName(uri) ?: "shared_${System.currentTimeMillis()}"
-            val targetFile = File(cachedDocsDir, fileName)
+            val cachedDocsDir = File(cacheDir, "cached_docs").apply { mkdirs() }
+            cleanupCacheDir(cachedDocsDir, maxBytes = 50 * 1024 * 1024L)
+
+            val rawName = queryDisplayName(uri)
+            val safeFileName = com.alldoc.app.core.util.UriSecurityUtils.sanitizeFileName(rawName)
+            val targetFile = File(cachedDocsDir, safeFileName)
+
+            if (!com.alldoc.app.core.util.UriSecurityUtils.isPathWithinDir(targetFile, cachedDocsDir)) {
+                return uri
+            }
+
             contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(targetFile).use { output ->
                     input.copyTo(output)
@@ -365,6 +385,16 @@ class MainActivity : ComponentActivity() {
             Uri.fromFile(targetFile)
         } catch (_: Exception) {
             uri // Fallback to raw URI if caching fails
+        }
+    }
+
+    private fun cleanupCacheDir(dir: File, maxBytes: Long) {
+        val files = dir.listFiles()?.sortedBy { it.lastModified() } ?: return
+        var totalSize = files.sumOf { it.length() }
+        for (file in files) {
+            if (totalSize <= maxBytes) break
+            totalSize -= file.length()
+            file.delete()
         }
     }
 

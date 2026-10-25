@@ -52,6 +52,15 @@ interface DocumentDao {
     @Query("SELECT * FROM document_versions WHERE documentUri = :documentUri ORDER BY timestamp DESC")
     fun getVersionsForDocument(documentUri: String): Flow<List<DocumentVersionEntity>>
 
+    @Query("SELECT * FROM document_versions WHERE documentUri = :documentUri ORDER BY timestamp DESC")
+    suspend fun getVersionsListForDocument(documentUri: String): List<DocumentVersionEntity>
+
+    @Query("DELETE FROM document_versions WHERE id = :id")
+    suspend fun deleteVersionById(id: Long)
+
+    @Query("SELECT * FROM document_versions ORDER BY timestamp ASC")
+    suspend fun getAllVersionsOldestFirst(): List<DocumentVersionEntity>
+
     @Query("DELETE FROM document_versions WHERE documentUri = :documentUri")
     suspend fun deleteVersionsForDocument(documentUri: String)
 }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Exclude database files to protect user documents from unencrypted cloud backups -->
+    <exclude domain="database" path="alldoc.db" />
+    <exclude domain="database" path="alldoc.db-shm" />
+    <exclude domain="database" path="alldoc.db-wal" />
+
+    <!-- Exclude version history snapshots -->
+    <exclude domain="file" path="versions/" />
+
+    <!-- Exclude cached and decrypted temporary files -->
+    <exclude domain="file" path="cached_docs/" />
+    <exclude domain="file" path="camera_scans/" />
+    <exclude domain="file" path="scans/" />
+    <exclude domain="root" path="." />
+</full-backup-content>

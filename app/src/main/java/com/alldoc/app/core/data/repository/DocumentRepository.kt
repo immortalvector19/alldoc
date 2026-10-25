@@ -120,6 +120,16 @@ class DocumentRepository(
     }
 
     suspend fun deleteDocument(uriString: String): Boolean = withContext(Dispatchers.IO) {
+        // Clean up all snapshot files on disk and in database
+        try {
+            val versions = dao.getVersionsListForDocument(uriString)
+            for (v in versions) {
+                val f = File(v.snapshotFilePath)
+                if (f.exists()) f.delete()
+            }
+            dao.deleteVersionsForDocument(uriString)
+        } catch (_: Exception) {}
+
         dao.deleteByUri(uriString)
         var deleted = false
         try {
@@ -163,6 +173,8 @@ class DocumentRepository(
             sizeBytes = file.length()
         )
         dao.insertVersion(entity)
+        pruneSnapshotsForDocument(uriString, maxSnapshots = 5)
+        enforceGlobalSnapshotCap(maxFolderSizeBytes = 50 * 1024 * 1024L)
         entity
     }
 
@@ -180,7 +192,50 @@ class DocumentRepository(
             sizeBytes = bytes.size.toLong()
         )
         dao.insertVersion(entity)
+        pruneSnapshotsForDocument(uriString, maxSnapshots = 5)
+        enforceGlobalSnapshotCap(maxFolderSizeBytes = 50 * 1024 * 1024L)
         entity
+    }
+
+    suspend fun pruneSnapshotsForDocument(documentUri: String, maxSnapshots: Int = 5) = withContext(Dispatchers.IO) {
+        try {
+            val versions = dao.getVersionsListForDocument(documentUri)
+            if (versions.size > maxSnapshots) {
+                val toDelete = versions.drop(maxSnapshots)
+                for (v in toDelete) {
+                    dao.deleteVersionById(v.id)
+                    val f = File(v.snapshotFilePath)
+                    if (f.exists()) f.delete()
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    suspend fun enforceGlobalSnapshotCap(maxFolderSizeBytes: Long = 50 * 1024 * 1024L) = withContext(Dispatchers.IO) {
+        try {
+            val versionsDir = File(context.filesDir, "versions")
+            if (!versionsDir.exists()) return@withContext
+            val allVersions = dao.getAllVersionsOldestFirst()
+            var currentTotalSize = versionsDir.listFiles()?.sumOf { it.length() } ?: 0L
+            for (v in allVersions) {
+                if (currentTotalSize <= maxFolderSizeBytes) break
+                dao.deleteVersionById(v.id)
+                val f = File(v.snapshotFilePath)
+                if (f.exists()) {
+                    val len = f.length()
+                    if (f.delete()) {
+                        currentTotalSize -= len
+                    }
+                }
+            }
+            // Cleanup orphaned .bak files not present in active version entities
+            val activeFiles = allVersions.map { it.snapshotFilePath }.toSet()
+            versionsDir.listFiles()?.forEach { file ->
+                if (file.name.endsWith(".bak") && file.absolutePath !in activeFiles) {
+                    file.delete()
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     fun getVersions(uriString: String): Flow<List<DocumentVersionEntity>> {

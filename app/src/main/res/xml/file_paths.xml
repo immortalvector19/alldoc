@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <files-path name="internal_files" path="." />
     <files-path name="scans" path="scans/" />
-    <files-path name="versions" path="versions/" />
-    <cache-path name="cache" path="." />
+    <files-path name="camera_scans" path="camera_scans/" />
+    <cache-path name="cached_docs" path="cached_docs/" />
+    <cache-path name="shared_exports" path="shared_exports/" />
 </paths>

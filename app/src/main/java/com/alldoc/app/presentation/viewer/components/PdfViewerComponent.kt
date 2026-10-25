@@ -282,7 +282,7 @@ fun PdfPageCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            if (bitmap != null) {
+            if (bitmap != null && !bitmap.isRecycled) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = "PDF Page ${pageIndex + 1}",

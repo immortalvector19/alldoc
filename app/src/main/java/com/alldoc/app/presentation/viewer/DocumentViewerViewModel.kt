@@ -369,32 +369,13 @@ class DocumentViewerViewModel @JvmOverloads constructor(
         }
     }
 
+    private val persistenceCoordinator by lazy { com.alldoc.app.presentation.viewer.coordinator.DocumentPersistenceCoordinator(application) }
+    private val pdfCoordinator by lazy { com.alldoc.app.presentation.viewer.coordinator.PdfViewerCoordinator(application) }
+
     fun splitPdfToUri(fromPage: Int, toPage: Int, destUri: Uri, onResult: (SaveResult) -> Unit) {
         val uri = activeUri ?: run { onResult(SaveResult.ValidationFailed("No active URI")); return }
         viewModelScope.launch {
-            val contentResolver = getApplication<Application>().contentResolver
-            val cacheDir = getApplication<Application>().cacheDir
-            val sink = ContentResolverStorageSink(contentResolver, destUri)
-
-            val result = SafeDocumentWriter.safeWrite(
-                sink = sink,
-                cacheDir = cacheDir,
-                writeStagedFile = { _: File, stagedOut: OutputStream ->
-                    val srcFile = copyStreamToCache(uri, "pdf_split_src_", ".pdf")
-                    val tempSplit = File.createTempFile("pdf_split_out_", ".pdf", cacheDir)
-                    try {
-                        PdfManipulator.split(srcFile, fromPage, toPage, tempSplit)
-                        tempSplit.inputStream().use { it.copyTo(stagedOut) }
-                    } finally {
-                        srcFile.delete()
-                        tempSplit.delete()
-                    }
-                },
-                validateStagedFile = { stagedFile: File ->
-                    validateSavedFile(stagedFile, DocumentFormat.PDF)
-                }
-            )
-            onResult(result)
+            pdfCoordinator.splitPdfToUri(uri, fromPage, toPage, destUri, onResult)
         }
     }
 
@@ -404,66 +385,33 @@ class DocumentViewerViewModel @JvmOverloads constructor(
         val pdfModel = current.content as? PdfDocumentModel ?: run { onComplete(false); return }
 
         viewModelScope.launch {
-            val success = withContext(Dispatchers.IO) {
+            val cacheDir = getApplication<Application>().cacheDir
+            val destFile = File.createTempFile("pdf_merged_", ".pdf", cacheDir)
+            val success = pdfCoordinator.mergePdfFiles(uri, secondPdfUri, destFile)
+            if (success) {
                 try {
-                    val cacheDir = getApplication<Application>().cacheDir
-                    val firstFile = copyStreamToCache(uri, "pdf_merge_1_", ".pdf")
-                    val secondFile = copyStreamToCache(secondPdfUri, "pdf_merge_2_", ".pdf")
-                    val destFile = File.createTempFile("pdf_merged_", ".pdf", cacheDir)
-
-                    try {
-                        PdfManipulator.merge(listOf(firstFile, secondFile), destFile)
-                    } finally {
-                        firstFile.delete()
-                        secondFile.delete()
-                    }
-
                     val pfd = ParcelFileDescriptor.open(destFile, ParcelFileDescriptor.MODE_READ_ONLY)
                     val engine = PdfRendererEngine(pfd)
                     current.pdfRendererEngine?.close()
-
-                    withContext(Dispatchers.Main) {
-                        _uiState.value = current.copy(
-                            content = pdfModel.copy(pageCount = engine.pageCount),
-                            pdfRendererEngine = engine,
-                            isModified = true
-                        )
-                    }
-                    true
+                    _uiState.value = current.copy(
+                        content = pdfModel.copy(pageCount = engine.pageCount),
+                        pdfRendererEngine = engine,
+                        isModified = true
+                    )
+                    onComplete(true)
                 } catch (_: Exception) {
-                    false
+                    onComplete(false)
                 }
+            } else {
+                onComplete(false)
             }
-            onComplete(success)
         }
     }
 
     fun protectPdfToUri(password: String, destUri: Uri, onResult: (SaveResult) -> Unit) {
         val uri = activeUri ?: run { onResult(SaveResult.ValidationFailed("No active URI")); return }
         viewModelScope.launch {
-            val contentResolver = getApplication<Application>().contentResolver
-            val cacheDir = getApplication<Application>().cacheDir
-            val sink = ContentResolverStorageSink(contentResolver, destUri)
-
-            val result = SafeDocumentWriter.safeWrite(
-                sink = sink,
-                cacheDir = cacheDir,
-                writeStagedFile = { _: File, stagedOut: OutputStream ->
-                    val srcFile = copyStreamToCache(uri, "pdf_protect_src_", ".pdf")
-                    val tempProtected = File.createTempFile("pdf_protected_", ".pdf", cacheDir)
-                    try {
-                        PdfManipulator.protectWithPassword(srcFile, tempProtected, password)
-                        tempProtected.inputStream().use { it.copyTo(stagedOut) }
-                    } finally {
-                        srcFile.delete()
-                        tempProtected.delete()
-                    }
-                },
-                validateStagedFile = { stagedFile: File ->
-                    isPdfEncrypted(stagedFile)
-                }
-            )
-            onResult(result)
+            pdfCoordinator.protectPdfToUri(uri, password, destUri, onResult)
         }
     }
 
@@ -551,69 +499,10 @@ class DocumentViewerViewModel @JvmOverloads constructor(
 
         viewModelScope.launch {
             _uiState.update { (it as? ViewerUiState.Success)?.copy(isSaving = true) ?: it }
-
-            val contentResolver = getApplication<Application>().contentResolver
-            val cacheDir = getApplication<Application>().cacheDir
-            val sink = ContentResolverStorageSink(contentResolver, destinationUri)
-
-            val result = SafeDocumentWriter.safeWrite(
-                sink = sink,
-                cacheDir = cacheDir,
-                writeStagedFile = { _: File, stagedOut: OutputStream ->
-                    val tempPlain = File.createTempFile("plain_vault_", ".tmp", cacheDir)
-                    try {
-                        FileOutputStream(tempPlain).use { out ->
-                            when (val content = current.content) {
-                                is WordDocumentModel -> DocxEngine.save(content, out)
-                                is SpreadsheetDocumentModel -> {
-                                    if (current.format == DocumentFormat.CSV) {
-                                        CsvEngine.save(content, out)
-                                    } else {
-                                        val origStream = activeUri?.let { u ->
-                                            try { contentResolver.openInputStream(u) } catch (_: Exception) { null }
-                                        }
-                                        XlsxEngine.save(content, origStream, out)
-                                    }
-                                }
-                                is TextDocumentModel -> TextEngine.save(content, out)
-                                is PdfDocumentModel -> {
-                                    val origFile = activeUri?.let { u ->
-                                        try { copyStreamToCache(u, "pdf_lock_", ".pdf") } catch (_: Exception) { null }
-                                    }
-                                    if (origFile != null) {
-                                        try {
-                                            PdfManipulator.exportWithAnnotations(
-                                                sourcePdfFile = origFile,
-                                                annotations = content.annotations,
-                                                outputStream = out
-                                            )
-                                        } finally {
-                                            origFile.delete()
-                                        }
-                                    }
-                                }
-                                else -> throw UnsupportedOperationException("Format is not supported for encryption")
-                            }
-                        }
-                        val plainBytes = tempPlain.readBytes()
-                        val encryptedBytes = DocumentCryptoEngine.encrypt(plainBytes, password)
-                        stagedOut.write(encryptedBytes)
-                    } finally {
-                        tempPlain.delete()
-                    }
-                },
-                validateStagedFile = { stagedFile: File ->
-                    DocumentCryptoEngine.isVaultFile(stagedFile)
-                }
-            )
-
-            _uiState.update {
-                if (it is ViewerUiState.Success) {
-                    it.copy(isSaving = false)
-                } else it
+            persistenceCoordinator.lockDocumentToVault(current, activeUri, password, destinationUri) { result ->
+                _uiState.update { (it as? ViewerUiState.Success)?.copy(isSaving = false) ?: it }
+                onResult(result)
             }
-
-            onResult(result)
         }
     }
 
@@ -710,54 +599,21 @@ class DocumentViewerViewModel @JvmOverloads constructor(
 
         viewModelScope.launch {
             _uiState.update { (it as? ViewerUiState.Success)?.copy(isSaving = true) ?: it }
-
-            val contentResolver = getApplication<Application>().contentResolver
-            val cacheDir = getApplication<Application>().cacheDir
-            val sink = ContentResolverStorageSink(contentResolver, uri)
-
-            val result = SafeDocumentWriter.safeWrite(
-                sink = sink,
-                cacheDir = cacheDir,
-                writeStagedFile = { backupFile: File, stagedOut: OutputStream ->
-                    when (val content = current.content) {
-                        is WordDocumentModel -> {
-                            DocxEngine.save(content, stagedOut)
-                        }
-                        is SpreadsheetDocumentModel -> {
-                            if (current.format == DocumentFormat.CSV) {
-                                CsvEngine.save(content, stagedOut)
-                            } else {
-                                XlsxEngine.save(content, backupFile.inputStream(), stagedOut)
-                            }
-                        }
-                        is TextDocumentModel -> {
-                            TextEngine.save(content, stagedOut)
-                        }
-                        is PdfDocumentModel -> {
-                            PdfManipulator.exportWithAnnotations(
-                                sourcePdfFile = backupFile,
-                                annotations = content.annotations,
-                                outputStream = stagedOut
-                            )
-                        }
-                        else -> throw UnsupportedOperationException("Format is not editable")
-                    }
-                },
-                validateStagedFile = { stagedFile: File ->
-                    validateSavedFile(stagedFile, current.format)
-                },
-                onSaveSnapshot = { backupFile: File ->
+            persistenceCoordinator.saveActiveDocument(
+                current = current,
+                activeUri = uri,
+                onSaveSnapshot = { backupFile ->
                     repository.saveSnapshotVersion(uriString = uri.toString(), file = backupFile, note = "Pre-save backup")
+                },
+                onResult = { result ->
+                    _uiState.update {
+                        if (it is ViewerUiState.Success) {
+                            it.copy(isSaving = false, isModified = result !is SaveResult.Success)
+                        } else it
+                    }
+                    onResult(result)
                 }
             )
-
-            _uiState.update {
-                if (it is ViewerUiState.Success) {
-                    it.copy(isSaving = false, isModified = result !is SaveResult.Success)
-                } else it
-            }
-
-            onResult(result)
         }
     }
 
@@ -779,65 +635,13 @@ class DocumentViewerViewModel @JvmOverloads constructor(
 
         viewModelScope.launch {
             _uiState.update { (it as? ViewerUiState.Success)?.copy(isSaving = true) ?: it }
-
-            val contentResolver = getApplication<Application>().contentResolver
-            val cacheDir = getApplication<Application>().cacheDir
-            val sink = ContentResolverStorageSink(contentResolver, destinationUri)
-
-            val result = SafeDocumentWriter.safeWrite(
-                sink = sink,
-                cacheDir = cacheDir,
-                writeStagedFile = { _: File, stagedOut: OutputStream ->
-                    when (val content = current.content) {
-                        is WordDocumentModel -> DocxEngine.save(content, stagedOut)
-                        is SpreadsheetDocumentModel -> {
-                            if (current.format == DocumentFormat.CSV) {
-                                CsvEngine.save(content, stagedOut)
-                            } else {
-                                val origStream = activeUri?.let { u ->
-                                    try { contentResolver.openInputStream(u) } catch (_: Exception) { null }
-                                }
-                                XlsxEngine.save(content, origStream, stagedOut)
-                            }
-                        }
-                        is TextDocumentModel -> TextEngine.save(content, stagedOut)
-                        is PdfDocumentModel -> {
-                            val origFile = activeUri?.let { u ->
-                                try { copyStreamToCache(u, "pdf_src_", ".pdf") } catch (_: Exception) { null }
-                            }
-                            if (origFile != null) {
-                                try {
-                                    PdfManipulator.exportWithAnnotations(
-                                        sourcePdfFile = origFile,
-                                        annotations = content.annotations,
-                                        outputStream = stagedOut
-                                    )
-                                } finally {
-                                    origFile.delete()
-                                }
-                            } else {
-                                throw IllegalStateException("Cannot access original PDF source for copying")
-                            }
-                        }
-                        else -> throw UnsupportedOperationException("Format is not supported")
-                    }
-                },
-                validateStagedFile = { stagedFile: File ->
-                    validateSavedFile(stagedFile, current.format)
+            persistenceCoordinator.saveDocumentAsCopy(current, activeUri, destinationUri) { result ->
+                if (result is SaveResult.Success) {
+                    viewModelScope.launch { repository.recordDocumentAccess(destinationUri) }
                 }
-            )
-
-            if (result is SaveResult.Success) {
-                repository.recordDocumentAccess(destinationUri)
+                _uiState.update { (it as? ViewerUiState.Success)?.copy(isSaving = false) ?: it }
+                onResult(result)
             }
-
-            _uiState.update {
-                if (it is ViewerUiState.Success) {
-                    it.copy(isSaving = false)
-                } else it
-            }
-
-            onResult(result)
         }
     }
 
