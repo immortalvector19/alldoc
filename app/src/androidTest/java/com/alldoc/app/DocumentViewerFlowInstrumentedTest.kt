@@ -1,9 +1,10 @@
 package com.alldoc.app
 
+import android.app.Application
 import android.content.Context
 import android.net.Uri
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -21,12 +22,12 @@ import java.io.File
 class DocumentViewerFlowInstrumentedTest {
 
     @get:Rule
-    val composeTestRule = createAndroidComposeRule<MainActivity>()
+    val composeTestRule = createComposeRule()
 
     @Test
     fun testReadOnlyDocumentBlocksDirectSave() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val viewModel = DocumentViewerViewModel(composeTestRule.activity.application)
+        val viewModel = DocumentViewerViewModel(context as Application)
 
         val cachedFile = File(context.cacheDir, "cached_sample.txt").apply {
             writeText("Sample cached text")

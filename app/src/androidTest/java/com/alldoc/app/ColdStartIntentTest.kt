@@ -25,6 +25,7 @@ class ColdStartIntentTest {
         val uri = Uri.fromFile(testFile)
 
         val intent = Intent(Intent.ACTION_VIEW).apply {
+            setClass(context, MainActivity::class.java)
             setDataAndType(uri, "text/plain")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -48,6 +49,7 @@ class ColdStartIntentTest {
         val uri = Uri.fromFile(testFile)
 
         val intent = Intent(Intent.ACTION_SEND).apply {
+            setClass(context, MainActivity::class.java)
             type = "text/csv"
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
