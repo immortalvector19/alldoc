@@ -16,7 +16,7 @@ Android 10+ (API 29+) and Android 11+ (API 30+) enforce Scoped Storage, restrict
    - Full-text search (FTS4/FTS5) table in Room for instant offline search across scanned OCR text and parsed document contents.
 3. **Security by Default**:
    - Zero telemetry tracking.
-   - Optional local AES-256-GCM hardware encryption for sensitive documents using Android KeyStore.
+   - Optional local AES-256-GCM encryption for sensitive documents using user passwords with PBKDF2-SHA256 (600,000 iterations).
    - Cloud uploads (Google Drive, OneDrive, Dropbox) are strictly user-initiated via explicit OAuth 2.0 PKCE actions or Android Share Sheet.
 
 ## Consequences

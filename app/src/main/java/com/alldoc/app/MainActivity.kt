@@ -217,6 +217,22 @@ class MainActivity : ComponentActivity() {
                                     homeViewModel.renameDocument(uriStr, name)
                                 },
                                 onShareDocument = { shareDocument(it) },
+                                onSaveCopyDocument = { doc ->
+                                    val safeFileName = if (doc.name.contains('.')) doc.name else "${doc.name}.${doc.format.extension}"
+                                    pendingCreateDocumentAction = { destUri ->
+                                        try {
+                                            contentResolver.openInputStream(Uri.parse(doc.uriString))?.use { input ->
+                                                contentResolver.openOutputStream(destUri)?.use { output ->
+                                                    input.copyTo(output)
+                                                }
+                                            }
+                                            Toast.makeText(this@MainActivity, "Saved copy to storage", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, "Failed to copy: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    createDocumentLauncher.launch(safeFileName)
+                                },
                                 onScanClick = { startDocumentScan() },
                                 onOpenFilePicker = {
                                     filePickerLauncher.launch(arrayOf("*/*"))

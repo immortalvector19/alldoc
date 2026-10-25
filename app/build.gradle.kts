@@ -47,6 +47,10 @@ android {
                 keyAlias = keyAliasVal
                 keyPassword = keyPasswordVal
             } else {
+                logger.warn("********************************************************************************")
+                logger.warn("WARNING: No release keystore found in KEYSTORE_PATH or keystore.properties.")
+                logger.warn("Falling back to DEBUG signing config for release build. DO NOT publish this APK!")
+                logger.warn("********************************************************************************")
                 // Fallback to debug keystore for CI / dev builds
                 val debugKeystore = signingConfigs.getByName("debug")
                 storeFile = debugKeystore.storeFile

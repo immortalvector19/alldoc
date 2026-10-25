@@ -73,7 +73,7 @@ The panel evaluated potential rendering and editing engines across performance, 
 
 ### D. Storage, Database, & Security
 - **Room Persistence Library (`androidx.room:room-runtime:2.6.1`)**: Fast SQLite ORM with Flow support for recent documents, favorites, and auto-save version history.
-- **AndroidX Security (`androidx.security:security-crypto:1.1.0-alpha06`)**: Hardware-backed KeyStore master keys with AES-256-GCM authenticated encryption for password-protected document vaults.
+- **Document Vault**: PBKDF2-HMAC-SHA256 (600,000 iterations) with authenticated AES-256-GCM container for password-protected document vaults.
 - **Storage Access Framework (SAF)**: Full compliance with Scoped Storage, supporting `ACTION_VIEW`, `ACTION_EDIT`, `ACTION_OPEN_DOCUMENT`, and `takePersistableUriPermission`.
 
 ---

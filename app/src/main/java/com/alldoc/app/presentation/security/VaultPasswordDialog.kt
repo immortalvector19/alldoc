@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,9 +42,9 @@ fun VaultPasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(12.dp),
         title = {
-            Text(title, fontWeight = FontWeight.Bold)
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         },
         text = {
             Column {
@@ -51,7 +52,7 @@ fun VaultPasswordDialog(
                     text = if (isUnlocking)
                         "Enter the password to decrypt and view this document:"
                     else
-                        "Set a password to encrypt this document using hardware-backed AES-256-GCM:",
+                        "Encrypt with a password (AES-256-GCM authenticated container):",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -64,7 +65,7 @@ fun VaultPasswordDialog(
                         errorMessage = null
                     },
                     label = { Text("Password") },
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(8.dp),
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -91,14 +92,15 @@ fun VaultPasswordDialog(
                         onConfirm(password.toCharArray())
                     }
                 },
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text(if (isUnlocking) "Unlock" else "Encrypt", fontWeight = FontWeight.SemiBold)
+                Text(if (isUnlocking) "Unlock" else "Encrypt", style = MaterialTheme.typography.labelMedium)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) {
-                Text("Cancel")
+            TextButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
+                Text("Cancel", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     )
