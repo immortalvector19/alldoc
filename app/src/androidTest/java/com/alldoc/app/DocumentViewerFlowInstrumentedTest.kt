@@ -32,6 +32,7 @@ class DocumentViewerFlowInstrumentedTest {
             writeText("Sample cached text")
         }
         val cachedUri = Uri.fromFile(cachedFile)
+        viewModel.loadDocument(cachedUri)
 
         var saveResult: SaveResult? = null
         viewModel.saveDocumentWithResult { result ->
